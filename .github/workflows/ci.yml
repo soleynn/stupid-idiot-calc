@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: |
+          # compile whatever .cpp files exist. no sources yet just means theres nothing to do
+          shopt -s globstar nullglob
+          files=(**/*.cpp)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no .cpp files yet, nothing to build"
+            exit 0
+          fi
+          echo "building: ${files[*]}"
+          g++ -std=c++17 -Wall -Wextra -o calc "${files[@]}"
+          echo "built ok"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: clang-format check
+        run: |
+          # just flags formatting drift, doesnt block merges. no sources yet = nothing to check
+          shopt -s globstar nullglob
+          files=(**/*.cpp **/*.h **/*.hpp **/*.cc)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "nothing to lint yet"
+            exit 0
+          fi
+          clang-format --dry-run --Werror --style=LLVM "${files[@]}"
