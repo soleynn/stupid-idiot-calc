@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 
+#include "calc/diagnostic.hpp"
 #include "calc/environment.hpp"
 #include "calc/evaluator.hpp"
 #include "calc/number.hpp"
@@ -60,7 +61,8 @@ int main() {
     if (result) {
       std::cout << calc::format_result(result) << "\n"; // result -> stdout
     } else {
-      std::cerr << calc::format_result(result) << "\n"; // error -> stderr
+      std::cerr << calc::render_diagnostic(trimmed, result.error())
+                << "\n"; // error + caret -> stderr
     }
   }
 

@@ -149,6 +149,9 @@ TEST_CASE("parser reports empty input") {
   auto tree = parse_str("   ");
   REQUIRE_FALSE(tree.has_value());
   REQUIRE(tree.error().kind == ErrorKind::EmptyInput);
+  // locationless, so a caret renderer wont point under blank space.
+  REQUIRE(tree.error().span.offset == 0u);
+  REQUIRE(tree.error().span.length == 0u);
 }
 
 TEST_CASE("a reasonable nesting depth still parses") {
