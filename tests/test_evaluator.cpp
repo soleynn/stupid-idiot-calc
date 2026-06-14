@@ -1,34 +1,86 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include <string_view>
 
 #include "calc/environment.hpp"
 #include "calc/evaluator.hpp"
 
 using namespace calc;
 
-TEST_CASE("evaluate returns a single number") {
+namespace {
+
+// evaluate a string and require it succeeded, returning the number. keeps the
+// arithmetic cases to one readable line each.
+Number value_of(std::string_view input) {
   Environment env;
-  auto r = evaluate("42", env);
-  REQUIRE(r.has_value());
-  REQUIRE(r.value() == 42.0);
+  auto result = evaluate(input, env);
+  REQUIRE(result.has_value());
+  return result.value();
+}
+
+// the mirror for the failure cases: require it errored, hand back the kind.
+ErrorKind error_kind_of(std::string_view input) {
+  Environment env;
+  auto result = evaluate(input, env);
+  REQUIRE_FALSE(result.has_value());
+  return result.error().kind;
+}
+
+} // namespace
+
+TEST_CASE("evaluate returns a single number") {
+  REQUIRE(value_of("42") == 42.0);
+}
+
+TEST_CASE("evaluate computes with the right precedence") {
+  REQUIRE(value_of("2 + 3 * 4") == 14.0);
+  REQUIRE(value_of("2 * 3 + 4") == 10.0);
+  REQUIRE(value_of("(2 + 3) * 4") == 20.0);
+}
+
+TEST_CASE("evaluate is left-associative for - and /") {
+  REQUIRE(value_of("8 - 3 - 2") == 3.0);
+  REQUIRE(value_of("20 / 5 / 2") == 2.0);
+}
+
+TEST_CASE("evaluate handles unary minus") {
+  REQUIRE(value_of("-5") == -5.0);
+  REQUIRE(value_of("3 + -2") == 1.0);
+  REQUIRE(value_of("-(2 + 3)") == -5.0);
+}
+
+TEST_CASE("evaluate handles fractional results") {
+  REQUIRE(value_of("3 / 4") == Catch::Approx(0.75));
+  REQUIRE(value_of("10 / 3") == Catch::Approx(3.3333).epsilon(0.001));
+}
+
+TEST_CASE("evaluate reports divide by zero instead of infinity") {
+  REQUIRE(error_kind_of("1 / 0") == ErrorKind::DivideByZero);
+  // a divisor that computes to zero must be caught too, not just a literal 0.
+  REQUIRE(error_kind_of("5 / (3 - 3)") == ErrorKind::DivideByZero);
+}
+
+TEST_CASE("an error in a sub-expression bubbles up to the top") {
+  // a 1/0 buried in a left operand, a right operand, and a unary operand: the
+  // error has to propagate back out through each kind of parent node.
+  REQUIRE(error_kind_of("1 / 0 + 1") == ErrorKind::DivideByZero);
+  REQUIRE(error_kind_of("1 + 1 / 0") == ErrorKind::DivideByZero);
+  REQUIRE(error_kind_of("-(1 / 0)") == ErrorKind::DivideByZero);
+}
+
+TEST_CASE("evaluate reports overflow instead of infinity") {
+  REQUIRE(error_kind_of("1e308 * 1e308") == ErrorKind::Overflow);
 }
 
 TEST_CASE("evaluate reports empty input") {
-  Environment env;
-  auto r = evaluate("   ", env);
-  REQUIRE_FALSE(r.has_value());
-  REQUIRE(r.error().kind == ErrorKind::EmptyInput);
+  REQUIRE(error_kind_of("   ") == ErrorKind::EmptyInput);
 }
 
 TEST_CASE("evaluate does not crash on garbage") {
-  Environment env;
-  auto r = evaluate("@#$", env);
-  REQUIRE_FALSE(r.has_value());
-  REQUIRE(r.error().kind == ErrorKind::UnexpectedChar);
+  REQUIRE(error_kind_of("@#$") == ErrorKind::UnexpectedChar);
 }
 
-TEST_CASE("evaluate does not handle full expressions yet") {
-  Environment env;
-  auto r = evaluate("1 + 2", env);
-  REQUIRE_FALSE(r.has_value());
-  REQUIRE(r.error().kind == ErrorKind::NotImplemented);
+TEST_CASE("evaluate passes a parse error straight through") {
+  REQUIRE(error_kind_of("2 + * 3") == ErrorKind::UnexpectedToken);
 }
