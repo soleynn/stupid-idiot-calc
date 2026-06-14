@@ -1,0 +1,26 @@
+# build output
+calc
+a.out
+*.out
+build/
+bin/
+
+# object files n libs
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
+*.dSYM/
+
+# cmake junk if i ever go that route
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# editor / os junk
+.vscode/
+.idea/
+*.swp
+.DS_Store
