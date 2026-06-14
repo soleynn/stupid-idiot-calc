@@ -61,6 +61,11 @@ struct EvalVisitor {
         return CalcError{ErrorKind::DivideByZero, "cant divide by zero"};
       }
       return checked(a / c);
+    case BinaryOpKind::Modulo:
+      if (c == 0.0) {
+        return CalcError{ErrorKind::DivideByZero, "cant modulo by zero"};
+      }
+      return checked(std::fmod(a, c));
     case BinaryOpKind::Power:
       return checked(std::pow(a, c));
     }
