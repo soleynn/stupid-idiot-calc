@@ -12,6 +12,7 @@ enum class TokenType {
   Minus,
   Star,
   Slash,
+  Percent,
   Caret,
   LParen,
   RParen,

@@ -15,11 +15,11 @@ namespace calc {
 //
 //   level  operators  associativity  grammar rule
 //   -----  ---------  -------------  --------------------------------------
-//     1     + -        left           expression := term  (('+'|'-') term )*
-//     2     * /        left           term       := unary (('*'|'/') unary)*
-//     3     unary -    right          unary      := ('+'|'-') unary | power
-//     4     ^          right          power      := primary ('^' unary)?
-//     5     ( ) num    --             primary    := number | '(' expression ')'
+//     1     + -        left          expression := term  (('+'|'-') term )*
+//     2     * / %      left          term       := unary (('*'|'/'|'%') unary)*
+//     3     unary -    right         unary      := ('+'|'-') unary | power
+//     4     ^          right         power      := primary ('^' unary)?
+//     5     ( ) num    --            primary    := number | '(' expression ')'
 //
 // left-associative levels loop (so 8-3-2 groups as (8-3)-2); the unary level
 // recurses, which is right-associative and lets --5 and -+5 nest. unary '+' is

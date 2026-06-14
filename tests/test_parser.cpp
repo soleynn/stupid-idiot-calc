@@ -27,6 +27,8 @@ const char *op_text(BinaryOpKind op) {
     return "*";
   case BinaryOpKind::Divide:
     return "/";
+  case BinaryOpKind::Modulo:
+    return "%";
   case BinaryOpKind::Power:
     return "^";
   }
@@ -75,6 +77,12 @@ TEST_CASE("parser builds left-associative + and -") {
 TEST_CASE("parser builds left-associative * and /") {
   REQUIRE(shape_of("2 * 3 * 4") == "(* (* 2 3) 4)");
   REQUIRE(shape_of("10 / 2 / 5") == "(/ (/ 10 2) 5)");
+}
+
+TEST_CASE("modulo shares the * and / level, left-associative") {
+  REQUIRE(shape_of("10 % 3") == "(% 10 3)");
+  // interleaving with / proves same precedence and left-to-right grouping.
+  REQUIRE(shape_of("8 / 3 % 2") == "(% (/ 8 3) 2)");
 }
 
 TEST_CASE("parser gives * and / higher precedence than + and -") {

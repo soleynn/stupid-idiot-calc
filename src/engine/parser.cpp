@@ -89,13 +89,23 @@ private:
     return left;
   }
 
-  // level 2: * and /, left-associative.
+  // level 2: * / and %, all left-associative and the same precedence.
   ExprPtr parse_term() {
     ExprPtr left = parse_unary();
-    while (peek().type == TokenType::Star || peek().type == TokenType::Slash) {
-      const BinaryOpKind op = advance().type == TokenType::Star
-                                  ? BinaryOpKind::Multiply
-                                  : BinaryOpKind::Divide;
+    while (peek().type == TokenType::Star || peek().type == TokenType::Slash ||
+           peek().type == TokenType::Percent) {
+      BinaryOpKind op;
+      switch (advance().type) {
+      case TokenType::Slash:
+        op = BinaryOpKind::Divide;
+        break;
+      case TokenType::Percent:
+        op = BinaryOpKind::Modulo;
+        break;
+      default: // the loop only let Star through to here
+        op = BinaryOpKind::Multiply;
+        break;
+      }
       ExprPtr right = parse_unary();
       left = std::make_unique<Expr>(
           BinaryOp{op, std::move(left), std::move(right)});

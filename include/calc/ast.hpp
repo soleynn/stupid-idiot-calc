@@ -20,6 +20,7 @@ enum class BinaryOpKind {
   Subtract, // a - b
   Multiply, // a * b
   Divide,   // a / b
+  Modulo,   // a % b
   Power,    // a ^ b
 };
 

@@ -64,6 +64,17 @@ TEST_CASE("an overflowing power is caught, not returned as inf") {
   REQUIRE(error_kind_of("10 ^ 400") == ErrorKind::Overflow);
 }
 
+TEST_CASE("evaluate handles the modulo operator") {
+  REQUIRE(value_of("10 % 3") == 1.0);
+  REQUIRE(value_of("5.5 % 2") == 1.5); // a real remainder, not integer-only
+  REQUIRE(value_of("-7 % 3") == -1.0); // the result takes the dividend's sign
+  REQUIRE(value_of("7 % -3") == 1.0);  // ...and ignores the divisor's
+}
+
+TEST_CASE("modulo by zero is an error, not NaN") {
+  REQUIRE(error_kind_of("5 % 0") == ErrorKind::DivideByZero);
+}
+
 TEST_CASE("evaluate handles fractional results") {
   REQUIRE(value_of("3 / 4") == Catch::Approx(0.75));
   REQUIRE(value_of("10 / 3") == Catch::Approx(3.3333).epsilon(0.001));

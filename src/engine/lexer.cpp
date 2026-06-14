@@ -47,6 +47,9 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
     case '/':
       single = TokenType::Slash;
       break;
+    case '%':
+      single = TokenType::Percent;
+      break;
     case '^':
       single = TokenType::Caret;
       break;
