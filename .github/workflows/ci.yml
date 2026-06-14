@@ -24,6 +24,26 @@ jobs:
       - name: test
         run: ctest --preset ci
 
+  # advisory asan/ubsan run; not a required check, so a red x here doesnt block.
+  sanitize:
+    runs-on: ubuntu-latest
+    env:
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: configure
+        run: cmake --preset sanitize
+
+      - name: build
+        run: cmake --build --preset sanitize
+
+      - name: test
+        run: ctest --preset sanitize
+
   lint:
     runs-on: ubuntu-latest
     steps:
