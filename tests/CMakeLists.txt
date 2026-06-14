@@ -12,7 +12,8 @@ add_executable(calc_tests
   test_lexer.cpp
   test_parser.cpp
   test_evaluator.cpp
-  test_format.cpp)
+  test_format.cpp
+  test_diagnostic.cpp)
 
 # tests link the engine directly (no cli, no stdin/stdout). they get the
 # warning flags but NOT -Werror, since catch2 macros expand in these TUs.

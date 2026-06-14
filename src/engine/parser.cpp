@@ -43,7 +43,7 @@ public:
   // parse a whole expression and insist the input is fully consumed.
   ExprPtr parse_root() {
     if (peek().type == TokenType::End) {
-      fail(ErrorKind::EmptyInput, "type an expression", peek());
+      fail(ErrorKind::EmptyInput, "type an expression");
     }
     ExprPtr expr = parse_expression();
     const Token &rest = peek();
@@ -167,6 +167,11 @@ private:
       fail(kind, std::move(message), peek());
     }
     return advance();
+  }
+
+  // for errors with nothing to point at, like empty input: no span, no caret.
+  [[noreturn]] void fail(ErrorKind kind, std::string message) {
+    throw ParseError{CalcError{kind, std::move(message)}};
   }
 
   // bail out of the recursion with an error aimed at one token. operators and

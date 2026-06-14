@@ -4,6 +4,7 @@
 #include <variant>
 #include <vector>
 
+#include "calc/assert.hpp"
 #include "calc/ast.hpp"
 #include "calc/lexer.hpp"
 #include "calc/parser.hpp"
@@ -61,6 +62,7 @@ struct EvalVisitor {
       }
       return checked(a / c);
     }
+    CALC_ASSERT(false, "every binary op kind is handled above");
     return CalcError{ErrorKind::NotImplemented, "unknown operator"};
   }
 };
