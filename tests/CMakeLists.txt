@@ -10,6 +10,7 @@ FetchContent_MakeAvailable(Catch2)
 add_executable(calc_tests
   test_result.cpp
   test_lexer.cpp
+  test_parser.cpp
   test_evaluator.cpp
   test_format.cpp)
 

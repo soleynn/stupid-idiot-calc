@@ -18,6 +18,7 @@ enum class ErrorKind {
   UnexpectedChar,
   UnexpectedToken,
   UnbalancedParen,
+  TooComplex, // nested too deep or too long to parse safely
   DivideByZero,
   Overflow,
   NotImplemented,
