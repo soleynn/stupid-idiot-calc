@@ -35,13 +35,27 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
     TokenType single = TokenType::End;
     bool matched = true;
     switch (c) {
-    case '+': single = TokenType::Plus; break;
-    case '-': single = TokenType::Minus; break;
-    case '*': single = TokenType::Star; break;
-    case '/': single = TokenType::Slash; break;
-    case '(': single = TokenType::LParen; break;
-    case ')': single = TokenType::RParen; break;
-    default: matched = false; break;
+    case '+':
+      single = TokenType::Plus;
+      break;
+    case '-':
+      single = TokenType::Minus;
+      break;
+    case '*':
+      single = TokenType::Star;
+      break;
+    case '/':
+      single = TokenType::Slash;
+      break;
+    case '(':
+      single = TokenType::LParen;
+      break;
+    case ')':
+      single = TokenType::RParen;
+      break;
+    default:
+      matched = false;
+      break;
     }
 
     if (matched) {
