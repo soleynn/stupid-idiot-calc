@@ -1,0 +1,2 @@
+# pin the formatter so ci and local agree. the ci lint job runs --style=file.
+BasedOnStyle: LLVM
