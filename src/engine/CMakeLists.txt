@@ -2,6 +2,7 @@
 # and the tests both link this.
 add_library(calc_core STATIC
   lexer.cpp
+  parser.cpp
   evaluator.cpp
   output_formatter.cpp)
 
