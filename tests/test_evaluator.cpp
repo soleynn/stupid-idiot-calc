@@ -50,6 +50,20 @@ TEST_CASE("evaluate handles unary minus") {
   REQUIRE(value_of("-(2 + 3)") == -5.0);
 }
 
+TEST_CASE("evaluate handles the exponent operator") {
+  REQUIRE(value_of("2 ^ 3") == 8.0);
+  REQUIRE(value_of("2 ^ 3 ^ 2") == 512.0);
+  REQUIRE(value_of("2 * 3 ^ 2") == 18.0);
+  REQUIRE(value_of("-2 ^ 2") == -4.0);
+  REQUIRE(value_of("(-2) ^ 2") == 4.0);
+  REQUIRE(value_of("2 ^ -2") == 0.25);
+  REQUIRE(value_of("9 ^ 0.5") == Catch::Approx(3.0));
+}
+
+TEST_CASE("an overflowing power is caught, not returned as inf") {
+  REQUIRE(error_kind_of("10 ^ 400") == ErrorKind::Overflow);
+}
+
 TEST_CASE("evaluate handles fractional results") {
   REQUIRE(value_of("3 / 4") == Catch::Approx(0.75));
   REQUIRE(value_of("10 / 3") == Catch::Approx(3.3333).epsilon(0.001));
