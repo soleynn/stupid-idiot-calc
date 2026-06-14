@@ -3,17 +3,18 @@
 #include <cstddef>
 #include <string>
 
+#include <fmt/format.h>
+
 namespace calc {
 
 std::string render_diagnostic(std::string_view input, const CalcError &error) {
-  std::string out = "error: " + error.message;
-
   const SourceSpan span = error.span;
   if (span.offset == 0 && span.length == 0) {
-    return out; // no location to point at, e.g. divide by zero
+    return fmt::format("error: {}", error.message); // no location to point at
   }
 
-  out += " (column " + std::to_string(span.offset + 1) + ")\n";
+  std::string out =
+      fmt::format("error: {} (column {})\n", error.message, span.offset + 1);
   out.append(input);
   out += '\n';
 
