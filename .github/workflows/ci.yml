@@ -12,18 +12,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: install ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: configure
+        run: cmake --preset ci
+
       - name: build
-        run: |
-          # compile whatever .cpp files exist. no sources yet just means theres nothing to do
-          shopt -s globstar nullglob
-          files=(**/*.cpp)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "no .cpp files yet, nothing to build"
-            exit 0
-          fi
-          echo "building: ${files[*]}"
-          g++ -std=c++17 -Wall -Wextra -o calc "${files[@]}"
-          echo "built ok"
+        run: cmake --build --preset ci
+
+      - name: test
+        run: ctest --preset ci
 
   lint:
     runs-on: ubuntu-latest
@@ -32,11 +31,12 @@ jobs:
 
       - name: clang-format check
         run: |
-          # just flags formatting drift, doesnt block merges. no sources yet = nothing to check
+          # advisory only, doesnt block merges. just flags formatting drift in
+          # our own code (build/ deps arent in the checkout so theyre skipped).
           shopt -s globstar nullglob
-          files=(**/*.cpp **/*.h **/*.hpp **/*.cc)
+          files=(src/**/*.cpp include/**/*.hpp tests/**/*.cpp)
           if [ ${#files[@]} -eq 0 ]; then
             echo "nothing to lint yet"
             exit 0
           fi
-          clang-format --dry-run --Werror --style=LLVM "${files[@]}"
+          clang-format --dry-run --Werror --style=file "${files[@]}"

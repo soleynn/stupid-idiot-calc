@@ -13,11 +13,18 @@ dont expect anything fancy. its a calculator. it does calculator things.
 
 ## building it
 
-no real build setup yet, but the rough plan is just compile the sources straight with g++:
+needs cmake, ninja and a c++17 compiler.
 
 ```sh
-g++ -std=c++17 -Wall -Wextra -o calc *.cpp
-./calc
+cmake --preset debug
+cmake --build --preset debug
+./build/debug/calc
+```
+
+run the tests with:
+
+```sh
+ctest --preset debug
 ```
 
 ## license
