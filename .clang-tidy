@@ -1,0 +1,10 @@
+# conservative, learner-friendly checks. advisory — not wired into the merge
+# gate yet. editors and a future tidy job can read this.
+Checks: >
+  bugprone-*,
+  performance-*,
+  portability-*,
+  modernize-*,
+  -modernize-use-trailing-return-type
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
