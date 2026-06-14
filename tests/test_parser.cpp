@@ -27,6 +27,8 @@ const char *op_text(BinaryOpKind op) {
     return "*";
   case BinaryOpKind::Divide:
     return "/";
+  case BinaryOpKind::Power:
+    return "^";
   }
   return "?";
 }
@@ -93,6 +95,18 @@ TEST_CASE("parser handles unary minus and a no-op unary plus") {
   REQUIRE(shape_of("2 * -3") == "(* 2 (neg 3))");
   REQUIRE(shape_of("+5") == "5");
   REQUIRE(shape_of("-(2 + 3)") == "(neg (+ 2 3))");
+}
+
+TEST_CASE("parser builds right-associative exponents") {
+  REQUIRE(shape_of("2 ^ 3") == "(^ 2 3)");
+  REQUIRE(shape_of("2 ^ 3 ^ 2") == "(^ 2 (^ 3 2))");
+}
+
+TEST_CASE("exponent precedence against * and a unary minus") {
+  REQUIRE(shape_of("2 * 3 ^ 2") == "(* 2 (^ 3 2))");
+  REQUIRE(shape_of("-2 ^ 2") == "(neg (^ 2 2))");
+  REQUIRE(shape_of("(-2) ^ 2") == "(^ (neg 2) 2)");
+  REQUIRE(shape_of("2 ^ -3") == "(^ 2 (neg 3))");
 }
 
 TEST_CASE("parser flags a missing operand and points at the bad token") {

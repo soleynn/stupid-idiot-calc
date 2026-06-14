@@ -61,6 +61,8 @@ struct EvalVisitor {
         return CalcError{ErrorKind::DivideByZero, "cant divide by zero"};
       }
       return checked(a / c);
+    case BinaryOpKind::Power:
+      return checked(std::pow(a, c));
     }
     CALC_ASSERT(false, "every binary op kind is handled above");
     return CalcError{ErrorKind::NotImplemented, "unknown operator"};

@@ -17,12 +17,17 @@ namespace calc {
 //   -----  ---------  -------------  --------------------------------------
 //     1     + -        left           expression := term  (('+'|'-') term )*
 //     2     * /        left           term       := unary (('*'|'/') unary)*
-//     3     unary -    right          unary      := ('+'|'-') unary | primary
-//     4     ( ) num    --             primary    := number | '(' expression ')'
+//     3     unary -    right          unary      := ('+'|'-') unary | power
+//     4     ^          right          power      := primary ('^' unary)?
+//     5     ( ) num    --             primary    := number | '(' expression ')'
 //
 // left-associative levels loop (so 8-3-2 groups as (8-3)-2); the unary level
 // recurses, which is right-associative and lets --5 and -+5 nest. unary '+' is
 // accepted as a no-op so +5 isnt a surprise error.
+//
+// '^' is right-associative too (2^3^2 is 2^(3^2)), and it binds tighter than
+// a unary minus on its left, so -2^2 means -(2^2). its exponent is a full
+// unary level, so 2^-3 still parses.
 
 // turn a token list (from tokenize) into a parse tree, or a CalcError pointing
 // at the offending token. never throws across this boundary, never evaluates.

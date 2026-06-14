@@ -116,10 +116,22 @@ private:
       advance();
       return parse_unary(); // +x is just x
     }
-    return parse_primary();
+    return parse_power();
   }
 
-  // level 4: a number, or a parenthesised expression.
+  // level 4: ^, right-associative; the exponent is a full unary, so 2^-3 works.
+  ExprPtr parse_power() {
+    ExprPtr base = parse_primary();
+    if (peek().type == TokenType::Caret) {
+      advance();
+      ExprPtr exponent = parse_unary();
+      return std::make_unique<Expr>(
+          BinaryOp{BinaryOpKind::Power, std::move(base), std::move(exponent)});
+    }
+    return base;
+  }
+
+  // level 5: a number, or a parenthesised expression.
   ExprPtr parse_primary() {
     const Token &t = peek();
     if (t.type == TokenType::Num) {
