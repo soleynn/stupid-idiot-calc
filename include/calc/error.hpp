@@ -24,6 +24,7 @@ enum class ErrorKind {
   DomainError,   // a math domain error, like sqrt of a negative
   UnknownName,   // an unknown function or constant name
   WrongArgCount, // a function called with the wrong number of arguments
+  ReservedName,  // tried to bind a name that's built in (pi, ans, a function)
   NotImplemented,
 };
 

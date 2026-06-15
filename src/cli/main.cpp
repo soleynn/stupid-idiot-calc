@@ -12,8 +12,12 @@ namespace {
 
 void print_help() {
   std::cout << "type an expression and hit enter.\n"
-               "  :help   show this\n"
-               "  :quit   leave (or just hit ctrl-d)\n";
+               "  ans            the last result\n"
+               "  let x = 5      name a value, then use x in later lines\n"
+               "  M+ M- MR MC    memory: add/subtract the last result, "
+               "recall, clear\n"
+               "  :help          show this\n"
+               "  :quit          leave (or just hit ctrl-d)\n";
 }
 
 std::string trim(const std::string &s) {
