@@ -65,7 +65,7 @@ struct FunctionCall {
 struct Expr {
   std::variant<NumberLiteral, Variable, UnaryOp, BinaryOp, FunctionCall> node;
 
-  Expr(NumberLiteral n) : node(std::move(n)) {}
+  Expr(NumberLiteral n) : node(n) {} // trivially copyable, no move to make
   Expr(Variable v) : node(std::move(v)) {}
   Expr(UnaryOp u) : node(std::move(u)) {}
   Expr(BinaryOp b) : node(std::move(b)) {}

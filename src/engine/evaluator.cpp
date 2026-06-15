@@ -196,10 +196,9 @@ struct EvalVisitor {
       if (lower == "m" || lower == "mr") { // memory recall
         value = env.memory();
         found = true;
-      } else if (lookup_constant(v.name, value)) {
-        found = true;
-      } else if (env.lookup_variable(v.name, value)) {
-        found = true;
+      } else if (lookup_constant(v.name, value) ||
+                 env.lookup_variable(v.name, value)) {
+        found = true; // a built-in constant, else a let-bound variable
       }
     }
     if (!found) {

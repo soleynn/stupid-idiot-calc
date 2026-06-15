@@ -92,7 +92,7 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
       if (fc.ec == std::errc::result_out_of_range) {
         // a valid number, just too big/small for a double. point the span at
         // the whole literal, not a single char.
-        const std::size_t len = static_cast<std::size_t>(fc.ptr - first);
+        const auto len = static_cast<std::size_t>(fc.ptr - first);
         return CalcError{ErrorKind::Overflow, "number is out of range",
                          SourceSpan{i, len}};
       }

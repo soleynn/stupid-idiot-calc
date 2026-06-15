@@ -1,10 +1,22 @@
-# conservative, learner-friendly checks. advisory — not wired into the merge
-# gate yet. editors and a future tidy job can read this.
+# conservative, learner-friendly checks. advisory - not wired into the merge
+# gate. the advisory clang-tidy ci job and editors read this.
+#
+# a few checks are turned off on purpose:
+#   - avoid-pragma-once:   we use #pragma once everywhere, deliberately
+#   - avoid-c-arrays:      the completer word list + crash message are C arrays
+#                          on purpose (they cross into C apis / a signal handler)
+#   - use-nodiscard:       too noisy for a small app; its a style call, not a bug
+#   - enum-size:           shrinking enum underlying types isnt worth the clutter
+#   - use-trailing-return-type: not the style here
 Checks: >
   bugprone-*,
   performance-*,
   portability-*,
   modernize-*,
-  -modernize-use-trailing-return-type
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard,
+  -modernize-avoid-c-arrays,
+  -portability-avoid-pragma-once,
+  -performance-enum-size
 WarningsAsErrors: ''
-HeaderFilterRegex: '.*'
+HeaderFilterRegex: '.*/(include/calc|src/cli|src/engine)/.*'
