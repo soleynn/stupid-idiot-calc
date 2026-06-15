@@ -13,6 +13,7 @@ add_executable(calc_tests
   test_parser.cpp
   test_evaluator.cpp
   test_environment.cpp
+  test_trace.cpp
   test_format.cpp
   test_diagnostic.cpp)
 
@@ -31,7 +32,10 @@ catch_discover_tests(calc_tests)
 add_test(NAME cli_oneshot COMMAND calc "2 + 3 * 4")
 set_tests_properties(cli_oneshot PROPERTIES
   PASS_REGULAR_EXPRESSION "^14\n"
-  FAIL_REGULAR_EXPRESSION "stupid idiot calc")
+  FAIL_REGULAR_EXPRESSION "stupid idiot calc|tokens:")
+
+add_test(NAME cli_trace COMMAND calc --trace "2 + 3 * 4")
+set_tests_properties(cli_trace PROPERTIES PASS_REGULAR_EXPRESSION "tokens:")
 
 add_test(NAME cli_version COMMAND calc --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "^calc [0-9]")
