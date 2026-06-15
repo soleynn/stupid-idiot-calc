@@ -59,6 +59,9 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
     case '^':
       single = TokenType::Caret;
       break;
+    case '=':
+      single = TokenType::Equals;
+      break;
     case '(':
       single = TokenType::LParen;
       break;

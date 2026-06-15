@@ -16,6 +16,7 @@ enum class TokenType {
   Slash,
   Percent,
   Caret,
+  Equals,
   LParen,
   RParen,
   Comma,

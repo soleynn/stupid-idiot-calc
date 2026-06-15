@@ -12,6 +12,7 @@ add_executable(calc_tests
   test_lexer.cpp
   test_parser.cpp
   test_evaluator.cpp
+  test_environment.cpp
   test_format.cpp
   test_diagnostic.cpp)
 
