@@ -7,6 +7,22 @@ FetchContent_Declare(
   GIT_TAG v3.15.0)
 FetchContent_MakeAvailable(Catch2)
 
+# rapidcheck for property-based parser tests (BSD-2). it has no releases, so its
+# pinned to a commit. we DONT set RC_ENABLE_CATCH: that makes rapidcheck vendor
+# its own Catch2 target, which collides with ours. its catch binding is also
+# catch2-v2-shaped, so instead we use the standalone rc::check() and wrap it in a
+# catch2 REQUIRE (see test_properties.cpp) - works cleanly against catch2 v3.
+FetchContent_Declare(
+  rapidcheck
+  GIT_REPOSITORY https://github.com/emil-e/rapidcheck.git
+  GIT_TAG b2d9ed2dddefc4b84318d664b4f221eb792d89c7)
+FetchContent_MakeAvailable(rapidcheck)
+
+# rapidcheck headers arent clean under our warning flags; mark them system.
+get_target_property(rapidcheck_includes rapidcheck INTERFACE_INCLUDE_DIRECTORIES)
+set_target_properties(rapidcheck PROPERTIES
+  INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${rapidcheck_includes}")
+
 add_executable(calc_tests
   test_result.cpp
   test_lexer.cpp
@@ -15,14 +31,16 @@ add_executable(calc_tests
   test_environment.cpp
   test_trace.cpp
   test_logger.cpp
+  test_properties.cpp
   test_format.cpp
   test_diagnostic.cpp)
 
 # tests link the engine directly (no cli, no stdin/stdout). they get the
 # warning flags but NOT -Werror, since catch2 macros expand in these TUs. fmt is
-# here for test_logger, which exercises the logger header's macros.
+# here for test_logger; rapidcheck drives the property tests.
 target_link_libraries(calc_tests PRIVATE calc_core calc_warnings
-                                         Catch2::Catch2WithMain fmt::fmt)
+                                         Catch2::Catch2WithMain fmt::fmt
+                                         rapidcheck)
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
