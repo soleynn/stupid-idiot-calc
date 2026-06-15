@@ -1,15 +1,17 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <variant>
+#include <vector>
 
 #include "calc/number.hpp"
 
 namespace calc {
 
-// the parse tree. three node kinds held in a variant, children owned by
-// unique_ptr so a tree frees itself with no raw new/delete anywhere. the
-// evaluator (later) walks this with std::visit; for now nothing evaluates it.
+// the parse tree. node kinds held in a variant, children owned by unique_ptr so
+// a tree frees itself with no raw new/delete anywhere. the evaluator walks this
+// with std::visit.
 
 enum class UnaryOpKind {
   Negate, // -x
@@ -32,6 +34,12 @@ struct NumberLiteral {
   Number value = 0.0;
 };
 
+// a bare name: a constant like `pi`, or (later) a user variable. the evaluator
+// is what knows which names mean something.
+struct Variable {
+  std::string name;
+};
+
 // a one-operand op (just unary minus for now).
 struct UnaryOp {
   UnaryOpKind op = UnaryOpKind::Negate;
@@ -45,14 +53,23 @@ struct BinaryOp {
   ExprPtr rhs;
 };
 
+// a call like `sqrt(2)` or `f(a, b)`. the parser records the args it sees; the
+// evaluator checks the name exists and that the count is right.
+struct FunctionCall {
+  std::string name;
+  std::vector<ExprPtr> args;
+};
+
 // one tree node: exactly one of the kinds above. the converting constructors
 // let the parser write `make_unique<Expr>(BinaryOp{...})` and read cleanly.
 struct Expr {
-  std::variant<NumberLiteral, UnaryOp, BinaryOp> node;
+  std::variant<NumberLiteral, Variable, UnaryOp, BinaryOp, FunctionCall> node;
 
   Expr(NumberLiteral n) : node(std::move(n)) {}
+  Expr(Variable v) : node(std::move(v)) {}
   Expr(UnaryOp u) : node(std::move(u)) {}
   Expr(BinaryOp b) : node(std::move(b)) {}
+  Expr(FunctionCall f) : node(std::move(f)) {}
 };
 
 } // namespace calc

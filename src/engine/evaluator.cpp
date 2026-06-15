@@ -1,6 +1,8 @@
 #include "calc/evaluator.hpp"
 
 #include <cmath>
+#include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -26,9 +28,78 @@ Result<Number> checked(Number value) {
 
 Result<Number> eval(const Expr &expr); // forward decl, the walk recurses
 
+// the built-in constants. resolved right here, not in the (still empty)
+// Environment; user-defined names come later and will layer on top.
+constexpr Number kPi = 3.14159265358979323846;
+constexpr Number kE = 2.71828182845904523536;
+constexpr Number kDegToRad = kPi / 180.0;
+
+bool lookup_constant(const std::string &name, Number &out) {
+  if (name == "pi") {
+    out = kPi;
+    return true;
+  }
+  if (name == "e") {
+    out = kE;
+    return true;
+  }
+  return false;
+}
+
+// the built-in functions, all single-argument. each does its own domain check
+// and runs the result through checked(), so an overflow (like exp of a big
+// number) comes back as an error, not a silent inf. trig works in degrees.
+Result<Number> fn_sqrt(Number x) {
+  if (x < 0.0) {
+    return CalcError{ErrorKind::DomainError, "sqrt needs a value >= 0"};
+  }
+  return checked(std::sqrt(x));
+}
+
+Result<Number> fn_ln(Number x) {
+  if (x <= 0.0) {
+    return CalcError{ErrorKind::DomainError, "ln needs a value > 0"};
+  }
+  return checked(std::log(x));
+}
+
+Result<Number> fn_log(Number x) {
+  if (x <= 0.0) {
+    return CalcError{ErrorKind::DomainError, "log needs a value > 0"};
+  }
+  return checked(std::log10(x));
+}
+
+Result<Number> fn_sin(Number x) { return checked(std::sin(x * kDegToRad)); }
+Result<Number> fn_cos(Number x) { return checked(std::cos(x * kDegToRad)); }
+Result<Number> fn_tan(Number x) { return checked(std::tan(x * kDegToRad)); }
+Result<Number> fn_abs(Number x) { return checked(std::fabs(x)); }
+Result<Number> fn_exp(Number x) { return checked(std::exp(x)); }
+Result<Number> fn_floor(Number x) { return checked(std::floor(x)); }
+Result<Number> fn_ceil(Number x) { return checked(std::ceil(x)); }
+
+using UnaryFn = Result<Number> (*)(Number);
+
+UnaryFn lookup_function(const std::string &name) {
+  static const std::unordered_map<std::string, UnaryFn> table = {
+      {"sqrt", fn_sqrt},   {"sin", fn_sin},  {"cos", fn_cos}, {"tan", fn_tan},
+      {"abs", fn_abs},     {"ln", fn_ln},    {"log", fn_log}, {"exp", fn_exp},
+      {"floor", fn_floor}, {"ceil", fn_ceil}};
+  const auto it = table.find(name);
+  return it == table.end() ? nullptr : it->second;
+}
+
 // one operator() per node kind; std::visit dispatches on the live variant.
 struct EvalVisitor {
   Result<Number> operator()(const NumberLiteral &n) const { return n.value; }
+
+  Result<Number> operator()(const Variable &v) const {
+    Number value = 0.0;
+    if (lookup_constant(v.name, value)) {
+      return value;
+    }
+    return CalcError{ErrorKind::UnknownName, "unknown name '" + v.name + "'"};
+  }
 
   Result<Number> operator()(const UnaryOp &u) const {
     Result<Number> operand = eval(*u.operand);
@@ -71,6 +142,24 @@ struct EvalVisitor {
     }
     CALC_ASSERT(false, "every binary op kind is handled above");
     return CalcError{ErrorKind::NotImplemented, "unknown operator"};
+  }
+
+  Result<Number> operator()(const FunctionCall &call) const {
+    const UnaryFn fn = lookup_function(call.name);
+    if (fn == nullptr) {
+      return CalcError{ErrorKind::UnknownName,
+                       "unknown function '" + call.name + "'"};
+    }
+    if (call.args.size() != 1) {
+      return CalcError{ErrorKind::WrongArgCount,
+                       call.name + " takes 1 argument but got " +
+                           std::to_string(call.args.size())};
+    }
+    const Result<Number> arg = eval(*call.args[0]);
+    if (!arg) {
+      return arg.error();
+    }
+    return fn(arg.value());
   }
 };
 

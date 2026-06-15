@@ -141,12 +141,20 @@ private:
     return base;
   }
 
-  // level 5: a number, or a parenthesised expression.
+  // level 5: a number, a name or call, or a parenthesised expression.
   ExprPtr parse_primary() {
     const Token &t = peek();
     if (t.type == TokenType::Num) {
       advance();
       return std::make_unique<Expr>(NumberLiteral{t.value});
+    }
+    if (t.type == TokenType::Ident) {
+      std::string name = t.text;
+      advance();
+      if (peek().type == TokenType::LParen) {
+        return parse_call(std::move(name));
+      }
+      return std::make_unique<Expr>(Variable{std::move(name)});
     }
     if (t.type == TokenType::LParen) {
       advance();
@@ -160,15 +168,35 @@ private:
       // a ')' with an open '(' waiting on it is a balanced pair missing its
       // operand (`()` or `(1 + )`); a ')' with nothing open is just stray.
       if (open_parens_ > 0) {
-        fail(ErrorKind::UnexpectedToken, "expected a number or '('", t);
+        fail(ErrorKind::UnexpectedToken, "expected a number, name, or '('", t);
       }
       fail(ErrorKind::UnbalancedParen, "unmatched ')'", t);
     }
     if (t.type == TokenType::End) {
       fail(ErrorKind::UnexpectedToken,
-           "expected a number or '(' but the input ended", t);
+           "expected a number, name, or '(' but the input ended", t);
     }
-    fail(ErrorKind::UnexpectedToken, "expected a number or '('", t);
+    fail(ErrorKind::UnexpectedToken, "expected a number, name, or '('", t);
+  }
+
+  // a function call, entered with the name already consumed and '(' next. reads
+  // the comma-separated argument list (which may be empty) up to the ')'. the
+  // name and the argument count arent checked here; thats the evaluator's job.
+  ExprPtr parse_call(std::string name) {
+    advance(); // the '('
+    ++open_parens_;
+    std::vector<ExprPtr> args;
+    if (peek().type != TokenType::RParen) {
+      args.push_back(parse_expression());
+      while (peek().type == TokenType::Comma) {
+        advance();
+        args.push_back(parse_expression());
+      }
+    }
+    expect(TokenType::RParen, ErrorKind::UnbalancedParen, "expected ')'");
+    --open_parens_;
+    return std::make_unique<Expr>(
+        FunctionCall{std::move(name), std::move(args)});
   }
 
   const Token &peek() const { return tokens_[pos_]; }

@@ -39,8 +39,18 @@ std::string sexpr(const Expr &e) {
   if (const auto *n = std::get_if<NumberLiteral>(&e.node)) {
     return format_number(n->value);
   }
+  if (const auto *v = std::get_if<Variable>(&e.node)) {
+    return v->name;
+  }
   if (const auto *u = std::get_if<UnaryOp>(&e.node)) {
     return "(neg " + sexpr(*u->operand) + ")";
+  }
+  if (const auto *c = std::get_if<FunctionCall>(&e.node)) {
+    std::string s = "(" + c->name;
+    for (const auto &arg : c->args) {
+      s += " " + sexpr(*arg);
+    }
+    return s + ")";
   }
   const auto &b = std::get<BinaryOp>(e.node);
   return std::string("(") + op_text(b.op) + " " + sexpr(*b.lhs) + " " +
@@ -115,6 +125,36 @@ TEST_CASE("exponent precedence against * and a unary minus") {
   REQUIRE(shape_of("-2 ^ 2") == "(neg (^ 2 2))");
   REQUIRE(shape_of("(-2) ^ 2") == "(^ (neg 2) 2)");
   REQUIRE(shape_of("2 ^ -3") == "(^ 2 (neg 3))");
+}
+
+TEST_CASE("parser reads a bare name as a variable") {
+  REQUIRE(shape_of("pi") == "pi");
+}
+
+TEST_CASE("parser builds function calls") {
+  REQUIRE(shape_of("sqrt(2)") == "(sqrt 2)");
+  // the call is a primary, and its argument is a full expression.
+  REQUIRE(shape_of("2 * sqrt(1 + 3)") == "(* 2 (sqrt (+ 1 3)))");
+}
+
+TEST_CASE("parser handles argument lists") {
+  // the parser doesnt know or care which names are real; it just shapes the
+  // tree. unknown names and bad arg counts are the evaluator's problem.
+  REQUIRE(shape_of("foo(3, 4)") == "(foo 3 4)"); // comma-separated args
+  REQUIRE(shape_of("bar()") == "(bar)");         // empty arg list still parses
+}
+
+TEST_CASE("parser flags a malformed argument list") {
+  SECTION("an unclosed call") {
+    auto tree = parse_str("sqrt(1");
+    REQUIRE_FALSE(tree.has_value());
+    REQUIRE(tree.error().kind == ErrorKind::UnbalancedParen);
+  }
+  SECTION("a trailing comma wants another argument") {
+    auto tree = parse_str("sqrt(1,)");
+    REQUIRE_FALSE(tree.has_value());
+    REQUIRE(tree.error().kind == ErrorKind::UnexpectedToken);
+  }
 }
 
 TEST_CASE("parser flags a missing operand and points at the bad token") {

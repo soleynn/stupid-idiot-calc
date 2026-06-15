@@ -46,3 +46,19 @@ TEST_CASE("tokenize reports out-of-range numbers") {
   REQUIRE(r.error().kind == ErrorKind::Overflow);
   REQUIRE(r.error().span.length == 5u); // the whole literal, not one char
 }
+
+TEST_CASE("tokenize reads names and commas") {
+  auto r = tokenize("sqrt(pi, 2)");
+  REQUIRE(r.has_value());
+  const auto &toks = r.value();
+  REQUIRE(toks.size() == 7u); // sqrt ( pi , 2 ) End
+  REQUIRE(toks[0].type == TokenType::Ident);
+  REQUIRE(toks[0].text == "sqrt"); // the whole name, kept separate from the '('
+  REQUIRE(toks[1].type == TokenType::LParen);
+  REQUIRE(toks[2].type == TokenType::Ident);
+  REQUIRE(toks[2].text == "pi");
+  REQUIRE(toks[3].type == TokenType::Comma);
+  REQUIRE(toks[4].type == TokenType::Num);
+  REQUIRE(toks[4].value == 2.0);
+  REQUIRE(toks[5].type == TokenType::RParen);
+}

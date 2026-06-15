@@ -12,7 +12,7 @@ TEST_CASE("diagnostic underlines the offending token with a column") {
   auto result = evaluate("2 + * 3", env);
   REQUIRE_FALSE(result.has_value());
   REQUIRE(render_diagnostic("2 + * 3", result.error()) ==
-          "error: expected a number or '(' (column 5)\n"
+          "error: expected a number, name, or '(' (column 5)\n"
           "2 + * 3\n"
           "    ^");
 }
@@ -27,10 +27,10 @@ TEST_CASE("diagnostic underlines a whole multi-character span") {
 }
 
 TEST_CASE("diagnostic points just past the end for an unfinished expression") {
-  CalcError err{ErrorKind::UnexpectedToken, "expected a number or '('",
+  CalcError err{ErrorKind::UnexpectedToken, "expected a number, name, or '('",
                 SourceSpan{3, 0}};
   REQUIRE(render_diagnostic("1 +", err) ==
-          "error: expected a number or '(' (column 4)\n"
+          "error: expected a number, name, or '(' (column 4)\n"
           "1 +\n"
           "   ^");
 }
@@ -40,7 +40,7 @@ TEST_CASE("diagnostic copies a leading tab so the caret stays lined up") {
   auto result = evaluate("\t* 3", env);
   REQUIRE_FALSE(result.has_value());
   REQUIRE(render_diagnostic("\t* 3", result.error()) ==
-          "error: expected a number or '(' (column 2)\n"
+          "error: expected a number, name, or '(' (column 2)\n"
           "\t* 3\n"
           "\t^");
 }
