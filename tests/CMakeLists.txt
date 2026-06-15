@@ -24,3 +24,20 @@ target_link_libraries(calc_tests PRIVATE calc_core calc_warnings
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 catch_discover_tests(calc_tests)
+
+# a few black-box checks of the actual binary: the scriptable one-shot contract
+# (a result and nothing else on stdout), --version, --help, and the error exit
+# code. these are the only tests that run the cli end to end.
+add_test(NAME cli_oneshot COMMAND calc "2 + 3 * 4")
+set_tests_properties(cli_oneshot PROPERTIES
+  PASS_REGULAR_EXPRESSION "^14\n"
+  FAIL_REGULAR_EXPRESSION "stupid idiot calc")
+
+add_test(NAME cli_version COMMAND calc --version)
+set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "^calc [0-9]")
+
+add_test(NAME cli_help COMMAND calc --help)
+set_tests_properties(cli_help PROPERTIES PASS_REGULAR_EXPRESSION "[Uu]sage")
+
+add_test(NAME cli_oneshot_error COMMAND calc "1 / 0")
+set_tests_properties(cli_oneshot_error PROPERTIES WILL_FAIL TRUE)
