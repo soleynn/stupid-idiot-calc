@@ -39,6 +39,12 @@ public:
     variables_[name] = value;
   }
 
+  // read-only view of the let-bound names, for the cli's :vars command. still
+  // i/o-free; it just hands back the data.
+  const std::unordered_map<std::string, Number> &variables() const {
+    return variables_;
+  }
+
 private:
   Number answer_ = 0.0;
   Number memory_ = 0.0;
