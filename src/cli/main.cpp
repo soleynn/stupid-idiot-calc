@@ -395,61 +395,63 @@ int run_repl(bool trace) {
 int main(int argc, char **argv) {
   calc::cli::install_crash_handler();
 
-  cxxopts::Options options("calc", "a stupid idiot calculator");
-  options.add_options()                                                     //
-      ("h,help", "show this help and exit")                                 //
-      ("v,version", "show the version and exit")                            //
-      ("t,trace", "show the pipeline (tokens, tree, eval steps) on stderr") //
-      ("log-level", "log threshold: trace|debug|info|warn|error|off",
-       cxxopts::value<std::string>()) //
-      ("expression", "evaluate this and exit instead of starting the repl",
-       cxxopts::value<std::vector<std::string>>());
-  options.positional_help("[expression]");
-  options.parse_positional({"expression"});
-
-  cxxopts::ParseResult args;
+  // the whole body is wrapped so a cxxopts parse/lookup error comes back as a
+  // clean user error (exit 2) instead of escaping main and tripping the crash
+  // handler, which is meant for actual internal bugs.
   try {
-    args = options.parse(argc, argv);
+    cxxopts::Options options("calc", "a stupid idiot calculator");
+    options.add_options()                                                     //
+        ("h,help", "show this help and exit")                                 //
+        ("v,version", "show the version and exit")                            //
+        ("t,trace", "show the pipeline (tokens, tree, eval steps) on stderr") //
+        ("log-level", "log threshold: trace|debug|info|warn|error|off",
+         cxxopts::value<std::string>()) //
+        ("expression", "evaluate this and exit instead of starting the repl",
+         cxxopts::value<std::vector<std::string>>());
+    options.positional_help("[expression]");
+    options.parse_positional({"expression"});
+
+    const cxxopts::ParseResult args = options.parse(argc, argv);
+
+    if (args.count("help") != 0) {
+      std::cout << options.help();
+      return kExitOk;
+    }
+    if (args.count("version") != 0) {
+      std::cout << "calc " << CALC_VERSION << "\n";
+      return kExitOk;
+    }
+
+    if (args.count("log-level") != 0) {
+      calc::LogLevel level = calc::LogLevel::Warn;
+      if (!calc::parse_log_level(args["log-level"].as<std::string>(), level)) {
+        std::cerr << "error: unknown log level '"
+                  << args["log-level"].as<std::string>() << "'\n";
+        return kExitUserError;
+      }
+      calc::set_log_level(level);
+      LOG_DEBUG("log level set to {}", calc::level_name(level));
+    }
+
+    const bool trace = args.count("trace") != 0;
+
+    // any leftover words are the one-shot expression. joined with spaces so
+    // both `calc "2+2"` and an unquoted `calc 2 + 2` work the same.
+    if (args.count("expression") != 0) {
+      const auto &words = args["expression"].as<std::vector<std::string>>();
+      std::string expression;
+      for (const std::string &word : words) {
+        if (!expression.empty()) {
+          expression += ' ';
+        }
+        expression += word;
+      }
+      return run_once(expression, trace);
+    }
+
+    return run_repl(trace);
   } catch (const std::exception &e) {
     std::cerr << "error: " << e.what() << "\n";
     return kExitUserError;
   }
-
-  if (args.count("help") != 0) {
-    std::cout << options.help();
-    return kExitOk;
-  }
-  if (args.count("version") != 0) {
-    std::cout << "calc " << CALC_VERSION << "\n";
-    return kExitOk;
-  }
-
-  if (args.count("log-level") != 0) {
-    calc::LogLevel level = calc::LogLevel::Warn;
-    if (!calc::parse_log_level(args["log-level"].as<std::string>(), level)) {
-      std::cerr << "error: unknown log level '"
-                << args["log-level"].as<std::string>() << "'\n";
-      return kExitUserError;
-    }
-    calc::set_log_level(level);
-    LOG_DEBUG("log level set to {}", calc::level_name(level));
-  }
-
-  const bool trace = args.count("trace") != 0;
-
-  // any leftover words are the one-shot expression. joined with spaces so both
-  // `calc "2+2"` and an unquoted `calc 2 + 2` work the same.
-  if (args.count("expression") != 0) {
-    const auto &words = args["expression"].as<std::vector<std::string>>();
-    std::string expression;
-    for (const std::string &word : words) {
-      if (!expression.empty()) {
-        expression += ' ';
-      }
-      expression += word;
-    }
-    return run_once(expression, trace);
-  }
-
-  return run_repl(trace);
 }

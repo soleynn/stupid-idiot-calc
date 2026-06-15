@@ -60,3 +60,68 @@ jobs:
             exit 0
           fi
           clang-format --dry-run --Werror --style=file "${files[@]}"
+
+  # advisory: runs clang-tidy over our own code (.clang-tidy config). findings
+  # are printed but dont fail the job (WarningsAsErrors is empty); a real clang
+  # parse error still goes red. deps + the test TUs are skipped.
+  clang-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja + clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang-tidy
+
+      - name: configure
+        run: cmake --preset debug
+
+      - name: clang-tidy
+        run: clang-tidy -p build/debug src/engine/*.cpp src/cli/*.cpp
+
+  # advisory: a gcov line/branch coverage report over the engine + cli, driven by
+  # the test suite. printed to the log and the run summary; never blocks.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja + gcovr
+        run: sudo apt-get update && sudo apt-get install -y ninja-build gcovr
+
+      - name: configure
+        run: cmake --preset coverage
+
+      - name: build
+        run: cmake --build --preset coverage
+
+      - name: test
+        run: ctest --preset coverage
+
+      - name: coverage report
+        run: |
+          gcovr --root . --filter 'include/calc/' --filter 'src/' \
+            --exclude-unreachable-branches --print-summary build/coverage \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # advisory: build the clang libFuzzer harness and run a short campaign over the
+  # parse pipeline. separate from the gcc `build` gate; a found crash goes red.
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja + clang
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+
+      - name: configure (clang, fuzzers + sanitizers, no test deps)
+        run: |
+          cmake -S . -B build/fuzz -G Ninja \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCALC_BUILD_TESTS=OFF -DCALC_ENABLE_FUZZERS=ON \
+            -DCALC_ENABLE_SANITIZERS=ON
+
+      - name: build fuzzer
+        run: cmake --build build/fuzz --target fuzz_parse
+
+      - name: fuzz for 30s
+        run: ./build/fuzz/fuzz_parse -max_total_time=30 -timeout=10 -rss_limit_mb=2048
