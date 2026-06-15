@@ -14,6 +14,12 @@ bool is_space(char c) {
 
 bool is_digit(char c) { return c >= '0' && c <= '9'; }
 
+bool is_alpha(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+bool is_ident_char(char c) { return is_alpha(c) || is_digit(c); }
+
 } // namespace
 
 Result<std::vector<Token>> tokenize(std::string_view input) {
@@ -59,6 +65,9 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
     case ')':
       single = TokenType::RParen;
       break;
+    case ',':
+      single = TokenType::Comma;
+      break;
     default:
       matched = false;
       break;
@@ -92,6 +101,19 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
       tok.value = value;
       tokens.push_back(tok);
       i += static_cast<std::size_t>(fc.ptr - first);
+      continue;
+    }
+
+    if (is_alpha(c)) {
+      // a name: a function or constant.
+      std::size_t j = i;
+      while (j < n && is_ident_char(input[j])) {
+        ++j;
+      }
+      tok.type = TokenType::Ident;
+      tok.text = std::string(input.substr(i, j - i));
+      tokens.push_back(std::move(tok));
+      i = j;
       continue;
     }
 

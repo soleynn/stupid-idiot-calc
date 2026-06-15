@@ -21,6 +21,9 @@ enum class ErrorKind {
   TooComplex, // nested too deep or too long to parse safely
   DivideByZero,
   Overflow,
+  DomainError,   // a math domain error, like sqrt of a negative
+  UnknownName,   // an unknown function or constant name
+  WrongArgCount, // a function called with the wrong number of arguments
   NotImplemented,
 };
 

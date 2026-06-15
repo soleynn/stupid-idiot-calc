@@ -75,6 +75,51 @@ TEST_CASE("modulo by zero is an error, not NaN") {
   REQUIRE(error_kind_of("5 % 0") == ErrorKind::DivideByZero);
 }
 
+TEST_CASE("evaluate resolves the built-in constants") {
+  REQUIRE(value_of("pi") == Catch::Approx(3.14159265358979));
+  REQUIRE(value_of("e") == Catch::Approx(2.71828182845905));
+}
+
+TEST_CASE("evaluate computes the named functions") {
+  REQUIRE(value_of("sqrt(9)") == 3.0);
+  REQUIRE(value_of("abs(-5)") == 5.0);
+  REQUIRE(value_of("floor(3.7)") == 3.0);
+  REQUIRE(value_of("ceil(3.2)") == 4.0);
+  REQUIRE(value_of("exp(0)") == 1.0);
+  REQUIRE(value_of("ln(1)") == 0.0);
+  REQUIRE(value_of("log(100)") == Catch::Approx(2.0));
+}
+
+TEST_CASE("trig functions work in degrees") {
+  REQUIRE(value_of("sin(30)") == Catch::Approx(0.5));
+  REQUIRE(value_of("cos(60)") == Catch::Approx(0.5));
+  REQUIRE(value_of("tan(45)") == Catch::Approx(1.0));
+}
+
+TEST_CASE("function arguments are evaluated and their errors propagate") {
+  REQUIRE(value_of("sqrt(abs(-9))") == 3.0); // nested calls
+  REQUIRE(error_kind_of("sqrt(1 / 0)") == ErrorKind::DivideByZero);
+}
+
+TEST_CASE("domain errors come back as errors, not nan") {
+  REQUIRE(error_kind_of("sqrt(-1)") == ErrorKind::DomainError);
+  REQUIRE(error_kind_of("ln(0)") == ErrorKind::DomainError);
+}
+
+TEST_CASE("an overflowing function result is caught, not returned as inf") {
+  REQUIRE(error_kind_of("exp(1000)") == ErrorKind::Overflow);
+}
+
+TEST_CASE("unknown names and functions are errors") {
+  REQUIRE(error_kind_of("xyz") == ErrorKind::UnknownName);
+  REQUIRE(error_kind_of("foo(2)") == ErrorKind::UnknownName);
+}
+
+TEST_CASE("functions called with the wrong number of arguments error") {
+  REQUIRE(error_kind_of("sqrt()") == ErrorKind::WrongArgCount);
+  REQUIRE(error_kind_of("sqrt(1, 2)") == ErrorKind::WrongArgCount);
+}
+
 TEST_CASE("evaluate handles fractional results") {
   REQUIRE(value_of("3 / 4") == Catch::Approx(0.75));
   REQUIRE(value_of("10 / 3") == Catch::Approx(3.3333).epsilon(0.001));
