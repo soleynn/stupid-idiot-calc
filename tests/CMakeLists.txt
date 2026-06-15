@@ -53,3 +53,21 @@ set_tests_properties(cli_help PROPERTIES PASS_REGULAR_EXPRESSION "[Uu]sage")
 
 add_test(NAME cli_oneshot_error COMMAND calc "1 / 0")
 set_tests_properties(cli_oneshot_error PROPERTIES WILL_FAIL TRUE)
+
+# the repl meta-commands need input on stdin, so these pipe through a shell.
+# the ci runner has bash; if its ever missing the tests are just skipped.
+find_program(BASH_EXECUTABLE bash)
+if(BASH_EXECUTABLE)
+  add_test(NAME cli_vars COMMAND ${BASH_EXECUTABLE} -c
+    "printf 'let x = 5\\nlet y = 7\\n:vars\\n:quit\\n' | $<TARGET_FILE:calc>")
+  set_tests_properties(cli_vars PROPERTIES PASS_REGULAR_EXPRESSION "x = 5")
+
+  add_test(NAME cli_history COMMAND ${BASH_EXECUTABLE} -c
+    "printf '2+2\\n:history\\n:quit\\n' | $<TARGET_FILE:calc>")
+  set_tests_properties(cli_history PROPERTIES PASS_REGULAR_EXPRESSION "1  2\\+2")
+
+  add_test(NAME cli_help_lists_commands COMMAND ${BASH_EXECUTABLE} -c
+    "printf ':help\\n:quit\\n' | $<TARGET_FILE:calc>")
+  set_tests_properties(cli_help_lists_commands PROPERTIES
+    PASS_REGULAR_EXPRESSION ":vars")
+endif()

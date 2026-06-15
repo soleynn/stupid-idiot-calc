@@ -1,12 +1,23 @@
+#include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <exception>
 #include <iostream>
 #include <map>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#if defined(__unix__) || defined(__APPLE__)
+#include <unistd.h> // isatty / fileno, to gate color on a real terminal
+#define CALC_HAVE_ISATTY 1
+#else
+#define CALC_HAVE_ISATTY 0
+#endif
+
 #include <cxxopts.hpp>
+#include <fmt/color.h>
 #include <fmt/format.h>
 #include <isocline.h>
 
@@ -95,16 +106,21 @@ void print_stats(const Stats &stats) {
   }
 }
 
-void print_repl_help() {
-  std::cout << "type an expression and hit enter.\n"
-               "  ans            the last result\n"
-               "  let x = 5      name a value, then use x in later lines\n"
-               "  M+ M- MR MC    memory: add/subtract the last result, "
-               "recall, clear\n"
-               "  :trace on/off  show tokens, tree and eval on stderr\n"
-               "  :stats         counts and average eval time this session\n"
-               "  :help          show this\n"
-               "  :quit          leave (or just hit ctrl-d)\n";
+// is this stream a real terminal? color and the :clear escape are gated on it
+// so piped/redirected output stays plain.
+bool stream_is_tty(std::FILE *stream) {
+#if CALC_HAVE_ISATTY
+  return isatty(fileno(stream)) != 0;
+#else
+  (void)stream;
+  return false;
+#endif
+}
+
+// wrap text in a color style, but only when the target stream is a terminal.
+std::string paint(bool enabled, const fmt::text_style &style,
+                  const std::string &text) {
+  return enabled ? fmt::format(style, "{}", text) : text;
 }
 
 std::string trim(const std::string &s) {
@@ -161,11 +177,12 @@ static bool is_calc_word_char(const char *s, long len) {
 // case-insensitive.
 static void add_calc_words(ic_completion_env_t *cenv, const char *prefix) {
   static const char *words[] = {
-      ":help", ":quit", ":trace", ":stats",         // repl commands
-      "M+",    "M-",    "MR",     "MC",             // memory
-      "sqrt",  "sin",   "cos",    "tan",    "abs",  //
-      "ln",    "log",   "exp",    "floor",  "ceil", // built-in functions
-      "pi",    "e",     "ans",    "let",            // constants + session names
+      ":help",  ":quit",  ":clear", ":history", ":vars",
+      ":trace", ":stats",                               // repl commands
+      "M+",     "M-",     "MR",     "MC",               // memory
+      "sqrt",   "sin",    "cos",    "tan",      "abs",  //
+      "ln",     "log",    "exp",    "floor",    "ceil", // built-in functions
+      "pi",     "e",      "ans",    "let", // constants + session names
       nullptr};
   ic_add_completions(cenv, prefix, words);
 }
@@ -177,6 +194,122 @@ static void repl_completer(ic_completion_env_t *cenv, const char *input) {
 
 } // extern "C"
 
+// the shared state a meta-command may read or poke. references so a handler can
+// flip `trace`/`quit` and the loop sees it.
+struct ReplState {
+  calc::Environment &env;
+  Stats &stats;
+  std::vector<std::string> &history;
+  bool &trace;
+  bool &quit;
+  bool tty_out; // stdout is a terminal: ok to clear the screen
+};
+
+// one meta-command. the table below is the single place they live; :help walks
+// it and adding a command is one row.
+struct ReplCommand {
+  std::vector<std::string> names; // what the user types; first is canonical
+  std::string usage;              // left column in :help
+  std::string help;               // right column in :help
+  void (*run)(ReplState &state, const std::string &arg);
+};
+
+const std::vector<ReplCommand> &commands(); // defined below; :help walks it
+
+void cmd_help(ReplState &, const std::string &) {
+  std::cout << "type an expression and hit enter.\n"
+               "  ans            the last result\n"
+               "  let x = 5      name a value, then use x in later lines\n"
+               "  M+ M- MR MC    memory: add/subtract the last result, "
+               "recall, clear\n"
+               "\ncommands:\n";
+  for (const ReplCommand &c : commands()) {
+    std::cout << fmt::format("  {:<14} {}\n", c.usage, c.help);
+  }
+}
+
+void cmd_clear(ReplState &state, const std::string &) {
+  if (state.tty_out) {
+    std::cout << "\x1b[2J\x1b[H" << std::flush; // clear screen, cursor home
+  }
+}
+
+void cmd_history(ReplState &state, const std::string &) {
+  if (state.history.empty()) {
+    std::cout << "(nothing yet)\n";
+    return;
+  }
+  for (std::size_t i = 0; i < state.history.size(); ++i) {
+    std::cout << fmt::format("  {:>3}  {}\n", i + 1, state.history[i]);
+  }
+}
+
+void cmd_vars(ReplState &state, const std::string &) {
+  const auto &vars = state.env.variables();
+  if (vars.empty()) {
+    std::cout << "(no variables yet - define one with let)\n";
+    return;
+  }
+  std::vector<std::pair<std::string, calc::Number>> sorted(vars.begin(),
+                                                           vars.end());
+  std::sort(sorted.begin(), sorted.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
+  for (const auto &v : sorted) {
+    std::cout << fmt::format("  {} = {}\n", v.first,
+                             calc::format_number(v.second));
+  }
+}
+
+void cmd_trace(ReplState &state, const std::string &arg) {
+  if (arg == "on") {
+    state.trace = true;
+    std::cout << "trace on\n";
+  } else if (arg == "off") {
+    state.trace = false;
+    std::cout << "trace off\n";
+  } else if (arg.empty()) {
+    std::cout << (state.trace ? "trace is on\n" : "trace is off\n");
+  } else {
+    std::cout << "usage: :trace on|off\n";
+  }
+}
+
+void cmd_stats(ReplState &state, const std::string &) {
+  print_stats(state.stats);
+}
+
+void cmd_quit(ReplState &state, const std::string &) { state.quit = true; }
+
+const std::vector<ReplCommand> &commands() {
+  static const std::vector<ReplCommand> table = {
+      {{":help", ":h"}, ":help", "show this", &cmd_help},
+      {{":clear"}, ":clear", "clear the screen", &cmd_clear},
+      {{":history"}, ":history", "show the lines u've entered", &cmd_history},
+      {{":vars"}, ":vars", "show ur defined variables", &cmd_vars},
+      {{":trace"},
+       ":trace on/off",
+       "show tokens, tree and eval on stderr",
+       &cmd_trace},
+      {{":stats"},
+       ":stats",
+       "counts and average eval time this session",
+       &cmd_stats},
+      {{":quit", ":q"}, ":quit", "leave (or just hit ctrl-d)", &cmd_quit},
+  };
+  return table;
+}
+
+const ReplCommand *find_command(const std::string &name) {
+  for (const ReplCommand &c : commands()) {
+    for (const std::string &n : c.names) {
+      if (n == name) {
+        return &c;
+      }
+    }
+  }
+  return nullptr;
+}
+
 // the interactive loop. keeps one Environment alive so ans/memory/let carry
 // from line to line, and never exits on a user error. --trace sets the starting
 // state; :trace flips it.
@@ -184,6 +317,12 @@ int run_repl(bool trace) {
   calc::Environment env;
   StderrTracer tracer;
   Stats stats;
+  std::vector<std::string> history;
+  bool quit = false;
+
+  // color is gated per-stream so piped/redirected output stays plain.
+  const bool color_out = stream_is_tty(stdout);
+  const bool color_err = stream_is_tty(stderr);
 
   // line editor: arrow-key history kept in memory only (NULL = no dotfile),
   // default 200-entry cap; the "> " prompt comes from the marker; tab completes
@@ -195,7 +334,7 @@ int run_repl(bool trace) {
   LOG_INFO("repl started");
   std::cout << "stupid idiot calc. :help for help, :quit to leave.\n";
 
-  while (true) {
+  while (!quit) {
     char *raw = ic_readline(""); // the marker supplies the "> " prompt
     if (raw == nullptr) {        // ctrl-d / ctrl-c / end of piped input
       std::cout << "\n";         // tidy newline, same as before
@@ -207,34 +346,21 @@ int run_repl(bool trace) {
     if (trimmed.empty()) {
       continue;
     }
+    history.push_back(trimmed);
 
     if (trimmed[0] == ':') {
-      if (trimmed == ":quit" || trimmed == ":q") {
-        break;
-      }
-      if (trimmed == ":help" || trimmed == ":h") {
-        print_repl_help();
+      // split "<name> <arg...>": the colon-word, then the rest, trimmed.
+      const auto space = trimmed.find_first_of(" \t");
+      const std::string name = trimmed.substr(0, space);
+      const std::string arg =
+          space == std::string::npos ? "" : trim(trimmed.substr(space + 1));
+      const ReplCommand *command = find_command(name);
+      if (command == nullptr) {
+        std::cout << "unknown command: " << name << " (try :help)\n";
         continue;
       }
-      if (trimmed == ":trace on") {
-        trace = true;
-        std::cout << "trace on\n";
-        continue;
-      }
-      if (trimmed == ":trace off") {
-        trace = false;
-        std::cout << "trace off\n";
-        continue;
-      }
-      if (trimmed == ":trace") {
-        std::cout << (trace ? "trace is on\n" : "trace is off\n");
-        continue;
-      }
-      if (trimmed == ":stats") {
-        print_stats(stats);
-        continue;
-      }
-      std::cout << "unknown command: " << trimmed << " (try :help)\n";
+      ReplState state{env, stats, history, trace, quit, color_out};
+      command->run(state, arg);
       continue;
     }
 
@@ -248,12 +374,15 @@ int run_repl(bool trace) {
 
     if (result) {
       ++stats.ok;
-      std::cout << calc::format_result(result) << "\n"; // result -> stdout
+      std::cout << paint(color_out, fmt::fg(fmt::color::green),
+                         calc::format_result(result))
+                << "\n"; // result -> stdout
     } else {
       ++stats.failed;
       ++stats.by_kind[result.error().kind];
       LOG_DEBUG("error: {}", result.error().message);
-      std::cerr << calc::render_diagnostic(trimmed, result.error())
+      std::cerr << paint(color_err, fmt::fg(fmt::color::red),
+                         calc::render_diagnostic(trimmed, result.error()))
                 << "\n"; // error + caret -> stderr
     }
   }
