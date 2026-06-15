@@ -1,6 +1,7 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <cxxopts.hpp>
@@ -11,6 +12,7 @@
 #include "calc/number.hpp"
 #include "calc/output_formatter.hpp"
 #include "calc/result.hpp"
+#include "calc/tracer.hpp"
 
 namespace {
 
@@ -21,12 +23,20 @@ namespace {
 constexpr int kExitOk = 0;
 constexpr int kExitUserError = 2;
 
+// the front-end's trace sink: the engine narrates the pipeline into this, and
+// it lands on stderr so the result on stdout stays clean for piping.
+class StderrTracer : public calc::Tracer {
+public:
+  void write(std::string_view text) override { std::cerr << text; }
+};
+
 void print_repl_help() {
   std::cout << "type an expression and hit enter.\n"
                "  ans            the last result\n"
                "  let x = 5      name a value, then use x in later lines\n"
                "  M+ M- MR MC    memory: add/subtract the last result, "
                "recall, clear\n"
+               "  :trace on/off  show tokens, tree and eval on stderr\n"
                "  :help          show this\n"
                "  :quit          leave (or just hit ctrl-d)\n";
 }
@@ -43,9 +53,11 @@ std::string trim(const std::string &s) {
 // evaluate one expression, print the result to stdout or the error to stderr,
 // and hand back a process exit code. this is the scriptable path: `calc "2+2"`
 // prints exactly `4` and nothing else, so it composes in a pipeline.
-int run_once(const std::string &expression) {
+int run_once(const std::string &expression, bool trace) {
   calc::Environment env;
-  const calc::Result<calc::Number> result = calc::evaluate(expression, env);
+  StderrTracer tracer;
+  const calc::Result<calc::Number> result =
+      calc::evaluate(expression, env, trace ? &tracer : nullptr);
   if (result) {
     std::cout << calc::format_result(result) << "\n";
     return kExitOk;
@@ -55,9 +67,11 @@ int run_once(const std::string &expression) {
 }
 
 // the interactive loop. keeps one Environment alive so ans/memory/let carry
-// from line to line, and never exits on a user error.
-int run_repl() {
+// from line to line, and never exits on a user error. --trace sets the starting
+// state; :trace flips it.
+int run_repl(bool trace) {
   calc::Environment env;
+  StderrTracer tracer;
   std::string line;
 
   std::cout << "stupid idiot calc. :help for help, :quit to leave.\n";
@@ -82,11 +96,26 @@ int run_repl() {
         print_repl_help();
         continue;
       }
+      if (trimmed == ":trace on") {
+        trace = true;
+        std::cout << "trace on\n";
+        continue;
+      }
+      if (trimmed == ":trace off") {
+        trace = false;
+        std::cout << "trace off\n";
+        continue;
+      }
+      if (trimmed == ":trace") {
+        std::cout << (trace ? "trace is on\n" : "trace is off\n");
+        continue;
+      }
       std::cout << "unknown command: " << trimmed << " (try :help)\n";
       continue;
     }
 
-    const calc::Result<calc::Number> result = calc::evaluate(trimmed, env);
+    const calc::Result<calc::Number> result =
+        calc::evaluate(trimmed, env, trace ? &tracer : nullptr);
     if (result) {
       std::cout << calc::format_result(result) << "\n"; // result -> stdout
     } else {
@@ -102,9 +131,10 @@ int run_repl() {
 
 int main(int argc, char **argv) {
   cxxopts::Options options("calc", "a stupid idiot calculator");
-  options.add_options()                          //
-      ("h,help", "show this help and exit")      //
-      ("v,version", "show the version and exit") //
+  options.add_options()                                                     //
+      ("h,help", "show this help and exit")                                 //
+      ("v,version", "show the version and exit")                            //
+      ("t,trace", "show the pipeline (tokens, tree, eval steps) on stderr") //
       ("expression", "evaluate this and exit instead of starting the repl",
        cxxopts::value<std::vector<std::string>>());
   options.positional_help("[expression]");
@@ -127,6 +157,8 @@ int main(int argc, char **argv) {
     return kExitOk;
   }
 
+  const bool trace = args.count("trace") != 0;
+
   // any leftover words are the one-shot expression. joined with spaces so both
   // `calc "2+2"` and an unquoted `calc 2 + 2` work the same.
   if (args.count("expression") != 0) {
@@ -138,8 +170,8 @@ int main(int argc, char **argv) {
       }
       expression += word;
     }
-    return run_once(expression);
+    return run_once(expression, trace);
   }
 
-  return run_repl();
+  return run_repl(trace);
 }

@@ -1,5 +1,6 @@
 #include "calc/evaluator.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <optional>
@@ -8,12 +9,16 @@
 #include <variant>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include "calc/assert.hpp"
 #include "calc/ast.hpp"
 #include "calc/environment.hpp"
 #include "calc/lexer.hpp"
+#include "calc/output_formatter.hpp"
 #include "calc/parser.hpp"
 #include "calc/token.hpp"
+#include "calc/tracer.hpp"
 
 namespace calc {
 
@@ -30,8 +35,9 @@ Result<Number> checked(Number value) {
 }
 
 // the walk recurses and needs the env to resolve names (ans, memory, user
-// variables), so it rides along by const ref the whole way down.
-Result<Number> eval(const Expr &expr, const Environment &env);
+// variables), so it rides along by const ref the whole way down. the tracer is
+// null on the normal path and only non-null under --trace / :trace.
+Result<Number> eval(const Expr &expr, const Environment &env, Tracer *tracer);
 
 // the built-in constants. resolved right here, not in the (still empty)
 // Environment; user-defined names come later and will layer on top.
@@ -114,73 +120,122 @@ bool is_reserved(const std::string &name) {
   return lookup_function(lower) != nullptr;
 }
 
+const char *op_symbol(BinaryOpKind op) {
+  switch (op) {
+  case BinaryOpKind::Add:
+    return "+";
+  case BinaryOpKind::Subtract:
+    return "-";
+  case BinaryOpKind::Multiply:
+    return "*";
+  case BinaryOpKind::Divide:
+    return "/";
+  case BinaryOpKind::Modulo:
+    return "%";
+  case BinaryOpKind::Power:
+    return "^";
+  }
+  return "?";
+}
+
+// the actual arithmetic for a binary op, pulled out so the evaluator can wrap a
+// trace step around it without the switch in the way. divide/modulo by zero and
+// overflow come back as errors, never a silent inf/nan.
+Result<Number> apply_binary(BinaryOpKind op, Number a, Number c) {
+  switch (op) {
+  case BinaryOpKind::Add:
+    return checked(a + c);
+  case BinaryOpKind::Subtract:
+    return checked(a - c);
+  case BinaryOpKind::Multiply:
+    return checked(a * c);
+  case BinaryOpKind::Divide:
+    if (c == 0.0) {
+      return CalcError{ErrorKind::DivideByZero, "cant divide by zero"};
+    }
+    return checked(a / c);
+  case BinaryOpKind::Modulo:
+    if (c == 0.0) {
+      return CalcError{ErrorKind::DivideByZero, "cant modulo by zero"};
+    }
+    return checked(std::fmod(a, c));
+  case BinaryOpKind::Power:
+    return checked(std::pow(a, c));
+  }
+  CALC_ASSERT(false, "every binary op kind is handled above");
+  return CalcError{ErrorKind::NotImplemented, "unknown operator"};
+}
+
 // one operator() per node kind; std::visit dispatches on the live variant. the
 // env is read-only here: name resolution reads it, but binding/memory writes
-// happen up at the statement level in evaluate().
+// happen up at the statement level in evaluate(). when tracer is non-null, each
+// node that computes a value emits one post-order line showing the work.
 struct EvalVisitor {
   const Environment &env;
+  Tracer *tracer;
 
-  Result<Number> operator()(const NumberLiteral &n) const { return n.value; }
+  void step(const std::string &line) const {
+    if (tracer != nullptr) {
+      tracer->write("  " + line + "\n");
+    }
+  }
+
+  Result<Number> operator()(const NumberLiteral &n) const {
+    step(format_number(n.value));
+    return n.value;
+  }
 
   Result<Number> operator()(const Variable &v) const {
-    if (v.name == "ans") {
-      return env.answer();
-    }
-    const std::string lower = to_lower(v.name);
-    if (lower == "m" || lower == "mr") { // memory recall
-      return env.memory();
-    }
     Number value = 0.0;
-    if (lookup_constant(v.name, value)) {
-      return value;
+    bool found = false;
+    if (v.name == "ans") {
+      value = env.answer();
+      found = true;
+    } else {
+      const std::string lower = to_lower(v.name);
+      if (lower == "m" || lower == "mr") { // memory recall
+        value = env.memory();
+        found = true;
+      } else if (lookup_constant(v.name, value)) {
+        found = true;
+      } else if (env.lookup_variable(v.name, value)) {
+        found = true;
+      }
     }
-    if (env.lookup_variable(v.name, value)) {
-      return value;
+    if (!found) {
+      return CalcError{ErrorKind::UnknownName, "unknown name '" + v.name + "'"};
     }
-    return CalcError{ErrorKind::UnknownName, "unknown name '" + v.name + "'"};
+    step(v.name + " = " + format_number(value));
+    return value;
   }
 
   Result<Number> operator()(const UnaryOp &u) const {
-    Result<Number> operand = eval(*u.operand, env);
+    Result<Number> operand = eval(*u.operand, env, tracer);
     if (!operand) {
       return operand.error();
     }
-    return -operand.value(); // negate is the only unary op, cant overflow
+    const Number value = -operand.value(); // negate cant overflow
+    step("-(" + format_number(operand.value()) + ") = " + format_number(value));
+    return value;
   }
 
   Result<Number> operator()(const BinaryOp &b) const {
-    Result<Number> lhs = eval(*b.lhs, env);
+    Result<Number> lhs = eval(*b.lhs, env, tracer);
     if (!lhs) {
       return lhs.error();
     }
-    Result<Number> rhs = eval(*b.rhs, env);
+    Result<Number> rhs = eval(*b.rhs, env, tracer);
     if (!rhs) {
       return rhs.error();
     }
     const Number a = lhs.value();
     const Number c = rhs.value();
-    switch (b.op) {
-    case BinaryOpKind::Add:
-      return checked(a + c);
-    case BinaryOpKind::Subtract:
-      return checked(a - c);
-    case BinaryOpKind::Multiply:
-      return checked(a * c);
-    case BinaryOpKind::Divide:
-      if (c == 0.0) {
-        return CalcError{ErrorKind::DivideByZero, "cant divide by zero"};
-      }
-      return checked(a / c);
-    case BinaryOpKind::Modulo:
-      if (c == 0.0) {
-        return CalcError{ErrorKind::DivideByZero, "cant modulo by zero"};
-      }
-      return checked(std::fmod(a, c));
-    case BinaryOpKind::Power:
-      return checked(std::pow(a, c));
+    Result<Number> out = apply_binary(b.op, a, c);
+    if (out) {
+      step(format_number(a) + " " + op_symbol(b.op) + " " + format_number(c) +
+           " = " + format_number(out.value()));
     }
-    CALC_ASSERT(false, "every binary op kind is handled above");
-    return CalcError{ErrorKind::NotImplemented, "unknown operator"};
+    return out;
   }
 
   Result<Number> operator()(const FunctionCall &call) const {
@@ -194,16 +249,133 @@ struct EvalVisitor {
                        call.name + " takes 1 argument but got " +
                            std::to_string(call.args.size())};
     }
-    const Result<Number> arg = eval(*call.args[0], env);
+    const Result<Number> arg = eval(*call.args[0], env, tracer);
     if (!arg) {
       return arg.error();
     }
-    return fn(arg.value());
+    Result<Number> out = fn(arg.value());
+    if (out) {
+      step(call.name + "(" + format_number(arg.value()) +
+           ") = " + format_number(out.value()));
+    }
+    return out;
   }
 };
 
-Result<Number> eval(const Expr &expr, const Environment &env) {
-  return std::visit(EvalVisitor{env}, expr.node);
+Result<Number> eval(const Expr &expr, const Environment &env, Tracer *tracer) {
+  return std::visit(EvalVisitor{env, tracer}, expr.node);
+}
+
+// render the token list to the tracer (the first of the three trace sections).
+const char *token_label(TokenType type) {
+  switch (type) {
+  case TokenType::Num:
+    return "number";
+  case TokenType::Ident:
+    return "name";
+  case TokenType::Plus:
+    return "+";
+  case TokenType::Minus:
+    return "-";
+  case TokenType::Star:
+    return "*";
+  case TokenType::Slash:
+    return "/";
+  case TokenType::Percent:
+    return "%";
+  case TokenType::Caret:
+    return "^";
+  case TokenType::Equals:
+    return "=";
+  case TokenType::LParen:
+    return "(";
+  case TokenType::RParen:
+    return ")";
+  case TokenType::Comma:
+    return ",";
+  case TokenType::End:
+    return "end";
+  }
+  return "?";
+}
+
+void trace_tokens(Tracer &tracer, const std::vector<Token> &tokens) {
+  tracer.write("tokens:\n");
+  for (const Token &tok : tokens) {
+    std::string line = token_label(tok.type);
+    if (tok.type == TokenType::Num) {
+      line += " " + format_number(tok.value);
+    } else if (tok.type == TokenType::Ident) {
+      line += " " + tok.text;
+    }
+    tracer.write("  " + line + "\n");
+  }
+}
+
+// render the parse tree, one node per line, children indented under their
+// parent (the second trace section).
+struct TreeRenderer {
+  std::string &out;
+  int depth;
+
+  void line(const std::string &label) const {
+    out.append(static_cast<std::size_t>(depth) * 2 + 2, ' ');
+    out += label;
+    out += '\n';
+  }
+  void recurse(const Expr &child) const {
+    std::visit(TreeRenderer{out, depth + 1}, child.node);
+  }
+
+  void operator()(const NumberLiteral &n) const {
+    line(format_number(n.value));
+  }
+  void operator()(const Variable &v) const { line(v.name); }
+  void operator()(const UnaryOp &u) const {
+    line("- (negate)");
+    recurse(*u.operand);
+  }
+  void operator()(const BinaryOp &b) const {
+    line(op_symbol(b.op));
+    recurse(*b.lhs);
+    recurse(*b.rhs);
+  }
+  void operator()(const FunctionCall &c) const {
+    line(c.name + "()");
+    for (const ExprPtr &arg : c.args) {
+      recurse(*arg);
+    }
+  }
+};
+
+void trace_tree(Tracer &tracer, const Expr &tree) {
+  tracer.write("tree:\n");
+  std::string out;
+  std::visit(TreeRenderer{out, 0}, tree.node);
+  tracer.write(out);
+}
+
+// the third trace section: header, the post-order step lines (emitted from
+// inside eval), then a final value + timing line. without a tracer its just a
+// plain eval, no timing overhead.
+Result<Number> run_eval(const Expr &tree, const Environment &env,
+                        Tracer *tracer) {
+  if (tracer == nullptr) {
+    return eval(tree, env, nullptr);
+  }
+  tracer->write("eval:\n");
+  const auto start = std::chrono::steady_clock::now();
+  Result<Number> result = eval(tree, env, tracer);
+  const auto end = std::chrono::steady_clock::now();
+  const double us =
+      std::chrono::duration<double, std::micro>(end - start).count();
+  if (result) {
+    tracer->write(fmt::format("  = {} in {:.2f} us\n",
+                              format_number(result.value()), us));
+  } else {
+    tracer->write(fmt::format("  stopped at an error in {:.2f} us\n", us));
+  }
+  return result;
 }
 
 // the bare memory "buttons", recognised before the expression parser sees them.
@@ -241,7 +413,8 @@ bool looks_like_assignment(const std::vector<Token> &tokens) {
 // bind the name, hand back the value. the rhs reuses parse()/eval() wholesale
 // by slicing the tokens after '='; the original offsets ride along, so a
 // mistake in the rhs still points a caret at the right column of the input.
-Result<Number> eval_let(const std::vector<Token> &tokens, Environment &env) {
+Result<Number> eval_let(const std::vector<Token> &tokens, Environment &env,
+                        Tracer *tracer) {
   std::size_t i = 1; // tokens[0] is `let`
   if (tokens[i].type != TokenType::Ident) {
     return CalcError{ErrorKind::UnexpectedToken, "let needs a name",
@@ -270,7 +443,10 @@ Result<Number> eval_let(const std::vector<Token> &tokens, Environment &env) {
   if (!tree) {
     return tree.error();
   }
-  Result<Number> value = eval(tree.value(), env);
+  if (tracer != nullptr) {
+    trace_tree(*tracer, tree.value());
+  }
+  Result<Number> value = run_eval(tree.value(), env, tracer);
   if (!value) {
     return value;
   }
@@ -281,12 +457,17 @@ Result<Number> eval_let(const std::vector<Token> &tokens, Environment &env) {
 
 } // namespace
 
-Result<Number> evaluate(std::string_view input, Environment &env) {
+Result<Number> evaluate(std::string_view input, Environment &env,
+                        Tracer *tracer) {
   Result<std::vector<Token>> lexed = tokenize(input);
   if (!lexed) {
     return lexed.error();
   }
   const std::vector<Token> &tokens = lexed.value();
+
+  if (tracer != nullptr) {
+    trace_tokens(*tracer, tokens);
+  }
 
   // memory buttons and let-bindings are statements, handled here before the
   // expression parser. everything else is a plain expression.
@@ -306,7 +487,7 @@ Result<Number> evaluate(std::string_view input, Environment &env) {
   }
 
   if (tokens[0].type == TokenType::Ident && tokens[0].text == "let") {
-    return eval_let(tokens, env);
+    return eval_let(tokens, env, tracer);
   }
 
   if (looks_like_assignment(tokens)) {
@@ -320,8 +501,11 @@ Result<Number> evaluate(std::string_view input, Environment &env) {
   if (!tree) {
     return tree.error();
   }
+  if (tracer != nullptr) {
+    trace_tree(*tracer, tree.value());
+  }
 
-  Result<Number> result = eval(tree.value(), env);
+  Result<Number> result = run_eval(tree.value(), env, tracer);
   if (result) {
     env.set_answer(result.value());
   }
