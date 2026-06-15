@@ -8,6 +8,7 @@
 
 #include <cxxopts.hpp>
 #include <fmt/format.h>
+#include <isocline.h>
 
 #include "crash_handler.hpp" // sibling header, not part of the public api
 
@@ -133,6 +134,49 @@ int run_once(const std::string &expression, bool trace) {
   return kExitUserError;
 }
 
+// isocline calls these back as C function pointers, so they need C language
+// linkage; static keeps them file-local. they drive tab-completion in the repl.
+
+extern "C" {
+
+// what counts as one "word" for completion. isocline's default treats ':' as a
+// separator, which would strip the colon off ':help'; we keep ':' (and '_') in
+// the word so the leading-colon commands complete as a unit.
+static bool is_calc_word_char(const char *s, long len) {
+  if (len != 1) {
+    return false;
+  }
+  const char c = s[0];
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9') || c == '_' || c == ':';
+}
+
+// the things worth completing. there's no shared table, so this is kept in sync
+// BY HAND with three sources of truth - update it when any of them change:
+//   - repl commands: the ':' dispatch in run_repl below
+//   - functions + constants: lookup_function / lookup_constant in evaluator.cpp
+//   - session + memory names: is_reserved / match_memory_command in
+//   evaluator.cpp
+// memory ops are spelled uppercase to match :help; matching is
+// case-insensitive.
+static void add_calc_words(ic_completion_env_t *cenv, const char *prefix) {
+  static const char *words[] = {
+      ":help", ":quit", ":trace", ":stats",         // repl commands
+      "M+",    "M-",    "MR",     "MC",             // memory
+      "sqrt",  "sin",   "cos",    "tan",    "abs",  //
+      "ln",    "log",   "exp",    "floor",  "ceil", // built-in functions
+      "pi",    "e",     "ans",    "let",            // constants + session names
+      nullptr};
+  ic_add_completions(cenv, prefix, words);
+}
+
+static void repl_completer(ic_completion_env_t *cenv, const char *input) {
+  // complete just the token under the cursor, using our word definition.
+  ic_complete_word(cenv, input, &add_calc_words, &is_calc_word_char);
+}
+
+} // extern "C"
+
 // the interactive loop. keeps one Environment alive so ans/memory/let carry
 // from line to line, and never exits on a user error. --trace sets the starting
 // state; :trace flips it.
@@ -140,19 +184,26 @@ int run_repl(bool trace) {
   calc::Environment env;
   StderrTracer tracer;
   Stats stats;
-  std::string line;
+
+  // line editor: arrow-key history kept in memory only (NULL = no dotfile),
+  // default 200-entry cap; the "> " prompt comes from the marker; tab completes
+  // commands/functions/constants. all of this is a no-op when stdin is piped.
+  ic_set_history(nullptr, -1);
+  ic_set_prompt_marker("> ", nullptr);
+  ic_set_default_completer(&repl_completer, nullptr);
 
   LOG_INFO("repl started");
   std::cout << "stupid idiot calc. :help for help, :quit to leave.\n";
 
   while (true) {
-    std::cout << "> ";
-    if (!std::getline(std::cin, line)) {
-      std::cout << "\n"; // tidy newline after ctrl-d
+    char *raw = ic_readline(""); // the marker supplies the "> " prompt
+    if (raw == nullptr) {        // ctrl-d / ctrl-c / end of piped input
+      std::cout << "\n";         // tidy newline, same as before
       break;
     }
+    const std::string trimmed = trim(raw);
+    ic_free(raw); // isocline owns the buffer; always hand it back
 
-    const std::string trimmed = trim(line);
     if (trimmed.empty()) {
       continue;
     }
