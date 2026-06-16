@@ -43,6 +43,19 @@ TEST_CASE("tokenize rejects unknown characters") {
   REQUIRE(r.error().kind == ErrorKind::UnexpectedChar);
 }
 
+TEST_CASE("tokenize rejects an embedded NUL byte") {
+  // a NUL interior to the input (the kind a piped repl line can smuggle in)
+  // must be an error, not silently dropped so the bytes around it merge.
+  std::string input = "2+2";
+  input.push_back('\0');
+  input += "2+3";
+  auto r = tokenize(input);
+  REQUIRE_FALSE(r.has_value());
+  REQUIRE(r.error().kind == ErrorKind::UnexpectedChar);
+  REQUIRE(r.error().message == "unexpected NUL byte in input");
+  REQUIRE(r.error().span.offset == 3u); // points right at the NUL
+}
+
 TEST_CASE("tokenize reports out-of-range numbers") {
   auto r = tokenize("1e400");
   REQUIRE_FALSE(r.has_value());

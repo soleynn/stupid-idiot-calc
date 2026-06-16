@@ -62,6 +62,11 @@ versioning](https://semver.org/).
   (exactly) before converting to radians, so `sin(360)` is `0`, and `sin(1e15)`
   / `cos(1e10)` no longer drift in the 4th significant figure. small and whole
   angles are unchanged.
+- a piped repl line with an embedded NUL byte is rejected now instead of being
+  silently mangled: the NUL used to get dropped and the bytes on either side
+  merged into a different number (`2+2`, NUL, `2+3` came out as `2+22+3` = 27).
+  piped input is read with getline, which keeps the NUL so the engine can flag
+  it.
 
 ## [0.1.0] - 2026-06-16
 

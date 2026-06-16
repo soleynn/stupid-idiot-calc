@@ -137,6 +137,12 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
       continue;
     }
 
+    if (c == '\0') {
+      // a NUL would otherwise read as an empty-looking "unexpected character
+      // ''" (the literal NUL closes the quoted char early). name it instead.
+      return CalcError{ErrorKind::UnexpectedChar,
+                       "unexpected NUL byte in input", SourceSpan{i, 1}};
+    }
     return CalcError{ErrorKind::UnexpectedChar,
                      std::string("unexpected character '") + c + "'",
                      SourceSpan{i, 1}};
