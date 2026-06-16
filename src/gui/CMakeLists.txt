@@ -3,11 +3,15 @@
 # lib the cli and tests link - which is the whole architectural payoff. Qt is
 # dynamic-linked under LGPLv3 (see the README note + licenses/), comes prebuilt
 # via aqtinstall in ci, and is never vendored into the repo.
-find_package(Qt6 REQUIRED COMPONENTS Quick)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(calc-gui main.cpp)
+
+# Theme.qml is the catppuccin palette as a single shared object - mark it a qml
+# singleton so Main.qml / CalcButton.qml reach it as `Theme.*` with no import.
+set_source_files_properties(Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(calc-gui
   URI calc.gui
@@ -15,6 +19,7 @@ qt_add_qml_module(calc-gui
   QML_FILES
     Main.qml
     CalcButton.qml
+    Theme.qml
   SOURCES
     engine_bridge.hpp
     engine_bridge.cpp)
@@ -31,7 +36,7 @@ target_compile_definitions(calc-gui PRIVATE CALC_VERSION="${CALC_VERSION}")
 # the isocline C lib is kept off our flag set; the real logic is in calc_core,
 # which stays strictly warned + -Werror'd. Qt6::Quick's headers come in as system
 # includes (imported target), so they dont trip warnings either.
-target_link_libraries(calc-gui PRIVATE calc_core Qt6::Quick)
+target_link_libraries(calc-gui PRIVATE calc_core Qt6::Quick Qt6::QuickControls2)
 
 # install rules — the flatpak (and later the mac/win deploy) install from here.
 # the binary goes to bin/; the freedesktop desktop file, appstream metainfo and

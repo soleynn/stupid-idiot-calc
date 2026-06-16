@@ -3,6 +3,7 @@
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQuickStyle>
 #include <QString>
 
 #include "engine_bridge.hpp"
@@ -22,6 +23,12 @@ int main(int argc, char *argv[]) {
   }
 
   QGuiApplication app(argc, argv);
+
+  // pin the Basic controls style: the keys are hand-drawn (CalcButton paints
+  // its own background + label), and Basic is the one style that renders those
+  // as written instead of a platform's native look overriding them - so the
+  // catppuccin skin looks identical on mac, linux and windows.
+  QQuickStyle::setStyle(QStringLiteral("Basic"));
 
   // a headless wiring check for ci: build the bridge, evaluate a known
   // expression and exit by its result - no window, no event loop. run it with
