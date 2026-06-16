@@ -50,6 +50,16 @@ TEST_CASE("tokenize reports out-of-range numbers") {
   REQUIRE(r.error().span.length == 5u); // the whole literal, not one char
 }
 
+TEST_CASE("tokenize underflows a too-small number to zero, not an error") {
+  // fast_float flags both 1e400 and 1e-400 as out-of-range, but the tiny one is
+  // an underflow to 0 (a fine answer), not the overflow the huge one is.
+  auto r = tokenize("1e-400");
+  REQUIRE(r.has_value());
+  REQUIRE(r.value().size() == 2u); // the number, then End
+  REQUIRE(r.value()[0].type == TokenType::Num);
+  REQUIRE(r.value()[0].value == 0.0);
+}
+
 TEST_CASE("tokenize reads the equals sign") {
   auto r = tokenize("x = 1");
   REQUIRE(r.has_value());

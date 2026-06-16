@@ -175,6 +175,14 @@ TEST_CASE("evaluate reports overflow instead of infinity") {
   REQUIRE(error_kind_of("1e308 * 1e308") == ErrorKind::Overflow);
 }
 
+TEST_CASE("a literal too small for a double underflows to zero") {
+  // 1e-400 rounds to 0, which is the right answer - not the "out of range" the
+  // huge side gets. the overflow direction is still an error.
+  REQUIRE(value_of("1e-400") == 0.0);
+  REQUIRE(value_of("1e-500") == 0.0);
+  REQUIRE(error_kind_of("1e400") == ErrorKind::Overflow);
+}
+
 TEST_CASE("evaluate reports empty input") {
   REQUIRE(error_kind_of("   ") == ErrorKind::EmptyInput);
 }
