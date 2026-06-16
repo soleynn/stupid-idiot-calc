@@ -1,0 +1,217 @@
+name: release
+
+# tag-only: fires on v1.2.3-style tags, never on PRs or branch pushes, so it cant
+# collide with the required `build` check in ci.yml (different file, and that check
+# only runs on push-to-main / pull_request).
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# the publish job creates a release + uploads assets, which needs write on contents.
+permissions:
+  contents: write
+
+jobs:
+  # mac + windows installers - the proven desktop-archives job from ci.yml, plus the
+  # tag version stamped in and a per-os --version assert. the version is computed
+  # once in a bash step (works on git-bash too) and passed to the build steps as a
+  # plain expression, so configure/build/package stay in the proven default shell
+  # (pwsh on windows) - no unproven bash+msvc combo.
+  desktop:
+    name: desktop installer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja (macos)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: set up msvc (windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      - name: install ninja (windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
+
+      - name: install qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: 6.8.1
+          cache: true
+
+      # strip the leading v: refs/tags/v1.2.3 -> 1.2.3. bash works on the windows
+      # runner too (git-bash); this is the only bash step on windows and it does no
+      # compilation, so it cant trip the msvc toolchain.
+      - name: derive version
+        id: ver
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # bash on both runners (git-bash on windows): pwsh mangles a bare
+      # -DCALC_VERSION=0.0.1 (splits the dotted value), bash doesnt. the msvc env
+      # is already in the job env, so cmake+ninja find cl under bash too.
+      - name: configure
+        shell: bash
+        run: cmake --preset gui-release -DCALC_VERSION=${{ steps.ver.outputs.version }}
+
+      - name: build
+        shell: bash
+        run: cmake --build --preset gui-release
+
+      - name: package
+        shell: bash
+        run: cpack --config build/gui-release/CPackConfig.cmake -B build/gui-release
+
+      # the built binary must report the tag. mac is inside the .app bundle; win is
+      # a flat exe. run + grep only, no compiler, so bash is safe on both.
+      - name: assert version (macos)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -eux
+          got=$(build/gui-release/calc-gui.app/Contents/MacOS/calc-gui --version)
+          echo "$got" | grep -qF "stupid idiot calc ${{ steps.ver.outputs.version }}"
+
+      - name: assert version (windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -eux
+          got=$(build/gui-release/calc-gui.exe --version)
+          echo "$got" | grep -qF "stupid idiot calc ${{ steps.ver.outputs.version }}"
+
+      - name: upload installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            build/gui-release/*.dmg
+            build/gui-release/*.zip
+          if-no-files-found: error
+
+  # linux flatpak. runs inside the kde 6.10 flatpak-builder image, which matches the
+  # manifest's runtime-version '6.10' and already ships flatpak-builder + the org.kde
+  # runtime/sdk (so nothing is downloaded). --privileged is needed for the bubblewrap
+  # sandbox. the tag version is patched into the manifest's config-opts with yq.
+  flatpak:
+    name: linux flatpak
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: derive version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # append -DCALC_VERSION=<tag> to the first module's config-opts before
+      # flatpak-builder reads the manifest. a later -D on the same list wins, so this
+      # overrides the default 0.1.0. yq may not be in the image; fetch it if missing.
+      - name: stamp version into manifest
+        run: |
+          set -eux
+          YQ=yq
+          if ! command -v yq >/dev/null 2>&1; then
+            curl -fsSL -o /tmp/yq \
+              https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+            chmod +x /tmp/yq
+            YQ=/tmp/yq
+          fi
+          VER="${{ steps.ver.outputs.version }}" "$YQ" -i \
+            '.modules[0].config-opts += ["-DCALC_VERSION=" + strenv(VER)]' \
+            flatpak/io.github.soleynn.StupidIdiotCalc.yml
+          echo "===== patched manifest ====="
+          cat flatpak/io.github.soleynn.StupidIdiotCalc.yml
+
+      - name: build flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@bf5cafdfd97dcf5a89c7475bbc86a616e1f86acb # v6.7
+        with:
+          bundle: stupid-idiot-calc.flatpak
+          manifest-path: flatpak/io.github.soleynn.StupidIdiotCalc.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          arch: x86_64
+          run-tests: false
+
+      # install the bundle for this user and assert --version (calc-gui prints it
+      # before any Qt init, so no display needed). give flatpak a writable runtime dir.
+      - name: assert version
+        run: |
+          set -eux
+          export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg}"
+          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+          flatpak install --user --noninteractive --assumeyes ./stupid-idiot-calc.flatpak
+          got="$(flatpak run io.github.soleynn.StupidIdiotCalc --version)"
+          test "$got" = "stupid idiot calc ${{ steps.ver.outputs.version }}"
+
+      - name: upload flatpak bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installer-flatpak
+          path: stupid-idiot-calc.flatpak
+          if-no-files-found: error
+
+  # gather the three installers and cut a DRAFT release to eyeball before publishing.
+  publish:
+    name: draft release
+    needs: [desktop, flatpak]
+    runs-on: ubuntu-latest
+    steps:
+      - name: download installers
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: installer-*
+          path: dist
+          merge-multiple: true
+
+      - name: list gathered files
+        run: find dist -type f | sort
+
+      - name: create draft release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.flatpak
+          body: |
+            these are unsigned builds, so each os throws up a warning before it lets
+            them run. heres how to get past it on each.
+
+            **macos (.dmg)** — not notarized, so gatekeeper quarantines it. mount the
+            dmg, drag the app to Applications, then right-click it and pick Open (and
+            Open again in the dialog), or clear the quarantine flag in a terminal:
+
+            ```
+            xattr -dr com.apple.quarantine /Applications/calc-gui.app
+            ```
+
+            **windows (.zip)** — smartscreen may say "Windows protected your PC". click
+            More info, then Run anyway. unzip it and run bin/calc-gui.exe (keep the
+            dlls next to it).
+
+            **linux (.flatpak)** — an unsigned single-file bundle. it needs the
+            org.kde.Platform 6.10 runtime (add flathub first if u dont have it):
+
+            ```
+            flatpak install --user stupid-idiot-calc.flatpak
+            flatpak run io.github.soleynn.StupidIdiotCalc
+            ```
+
+            ---
+
+            the gui links Qt dynamically under the LGPL v3. the bundled Qt is
+            unmodified - u can swap in ur own Qt of the same major version; source at
+            https://github.com/qt/qtbase
