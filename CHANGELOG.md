@@ -72,6 +72,10 @@ versioning](https://semver.org/).
   column and caret count characters instead of bytes so they line up under
   multibyte utf-8. a non-ascii character is reported as a whole glyph with a
   valid message (`unexpected character 'é'`) rather than a single stray byte.
+- divide-by-zero, domain and overflow errors point a caret at the operator or
+  function that failed now (`1 / 0` underlines the `/`, `sqrt(-1)` the `sqrt`,
+  and a `let` carries the caret into its right-hand side) instead of printing a
+  bare message with no location — the same caret a syntax error already gets.
 
 ### changed
 

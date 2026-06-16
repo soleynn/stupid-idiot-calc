@@ -46,8 +46,31 @@ TEST_CASE("diagnostic copies a leading tab so the caret stays lined up") {
 }
 
 TEST_CASE("diagnostic skips the caret when the error has no location") {
-  CalcError err{ErrorKind::DivideByZero, "cant divide by zero"};
-  REQUIRE(render_diagnostic("1 / 0", err) == "error: cant divide by zero");
+  // empty input has nothing to point at, so it renders as a bare message.
+  CalcError err{ErrorKind::EmptyInput, "type an expression"};
+  REQUIRE(render_diagnostic("   ", err) == "error: type an expression");
+}
+
+TEST_CASE("a runtime error points a caret at the operator that failed") {
+  Environment env;
+  auto result = evaluate("1 / 0", env);
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error().span.offset == 2u); // the '/'
+  REQUIRE(result.error().span.length == 1u);
+  REQUIRE(render_diagnostic("1 / 0", result.error()) ==
+          "error: cant divide by zero (column 3)\n"
+          "1 / 0\n"
+          "  ^");
+}
+
+TEST_CASE("a runtime error points a caret at the function that failed") {
+  Environment env;
+  auto result = evaluate("sqrt(-1)", env);
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(render_diagnostic("sqrt(-1)", result.error()) ==
+          "error: sqrt needs a value >= 0 (column 1)\n"
+          "sqrt(-1)\n"
+          "^~~~");
 }
 
 TEST_CASE("diagnostic underlines a whole multi-character error token") {

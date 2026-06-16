@@ -5,6 +5,7 @@
 #include <variant>
 #include <vector>
 
+#include "calc/error.hpp" // for SourceSpan
 #include "calc/number.hpp"
 
 namespace calc {
@@ -38,6 +39,7 @@ struct NumberLiteral {
 // is what knows which names mean something.
 struct Variable {
   std::string name;
+  SourceSpan span; // the name token, so an unknown-name error can point at it
 };
 
 // a one-operand op (just unary minus for now).
@@ -51,6 +53,7 @@ struct BinaryOp {
   BinaryOpKind op = BinaryOpKind::Add;
   ExprPtr lhs;
   ExprPtr rhs;
+  SourceSpan span; // the operator token, for a divide-by-zero/overflow caret
 };
 
 // a call like `sqrt(2)` or `f(a, b)`. the parser records the args it sees; the
@@ -58,6 +61,7 @@ struct BinaryOp {
 struct FunctionCall {
   std::string name;
   std::vector<ExprPtr> args;
+  SourceSpan span; // the name token, for a domain/unknown-function caret
 };
 
 // one tree node: exactly one of the kinds above. the converting constructors
