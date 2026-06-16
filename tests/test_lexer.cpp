@@ -84,6 +84,44 @@ TEST_CASE("tokenize underflows a too-small number to zero, not an error") {
   REQUIRE(r.value()[0].value == 0.0);
 }
 
+TEST_CASE("tokenize names an unsupported base prefix instead of splitting it") {
+  // 0x1F used to lex as Num(0) + Ident(x1F) and surface as a vague
+  // trailing-input error; now the lexer says what's actually wrong, with a
+  // caret on the '0x'.
+  auto hex = tokenize("0x1F");
+  REQUIRE_FALSE(hex.has_value());
+  REQUIRE(hex.error().kind == ErrorKind::UnexpectedChar);
+  REQUIRE(hex.error().message == "hex literals arent supported");
+  REQUIRE(hex.error().span.offset == 0u);
+  REQUIRE(hex.error().span.length == 2u);
+
+  REQUIRE(tokenize("0X1F").error().message == "hex literals arent supported");
+  REQUIRE(tokenize("0b101").error().message ==
+          "binary literals arent supported");
+  REQUIRE(tokenize("0o17").error().message == "octal literals arent supported");
+}
+
+TEST_CASE("tokenize names a second decimal point instead of splitting it") {
+  // 1.2.3 used to lex as 1.2 then .3 and read as trailing input; now the lexer
+  // points at the offending second dot.
+  auto r = tokenize("1.2.3");
+  REQUIRE_FALSE(r.has_value());
+  REQUIRE(r.error().kind == ErrorKind::UnexpectedChar);
+  REQUIRE(r.error().message ==
+          "a number cant have more than one decimal point");
+  REQUIRE(r.error().span.offset == 3u); // the second dot
+  REQUIRE(r.error().span.length == 1u);
+}
+
+TEST_CASE("the friendlier number checks dont reject valid numbers") {
+  // these look superficially like the rejected cases but are well-formed: a
+  // bare or scientific zero, a trailing/leading dot, an exponent.
+  for (const char *ok : {"0", "0.5", "3.", ".5", "1e5", "0e5", "100"}) {
+    CAPTURE(ok);
+    REQUIRE(tokenize(ok).has_value());
+  }
+}
+
 TEST_CASE("tokenize reads the equals sign") {
   auto r = tokenize("x = 1");
   REQUIRE(r.has_value());

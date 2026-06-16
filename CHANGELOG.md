@@ -76,6 +76,10 @@ versioning](https://semver.org/).
   function that failed now (`1 / 0` underlines the `/`, `sqrt(-1)` the `sqrt`,
   and a `let` carries the caret into its right-hand side) instead of printing a
   bare message with no location — the same caret a syntax error already gets.
+- a couple of number typos get a specific message now instead of a vague
+  "unexpected input": `0x1F` / `0b101` / `0o17` say hex / binary / octal literals
+  arent supported (caret on the `0x`), and `1.2.3` says a number cant have more
+  than one decimal point (caret on the second dot).
 
 ### changed
 

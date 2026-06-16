@@ -145,11 +145,52 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
         return CalcError{ErrorKind::UnexpectedChar, "could not read a number",
                          SourceSpan{i, 1}};
       }
+
+      const std::size_t len = static_cast<std::size_t>(fc.ptr - first);
+      const std::size_t end = i + len;
+
+      // a base prefix the engine doesnt support: 0x.. / 0b.. / 0o.. .
+      // fast_float reads just the leading 0, leaving (say) x1F to look like a
+      // stray name, so the error lands downstream as a vague "unexpected
+      // input". name it here.
+      if (len == 1 && c == '0' && end < n) {
+        const char *base = nullptr;
+        switch (input[end]) {
+        case 'x':
+        case 'X':
+          base = "hex";
+          break;
+        case 'b':
+        case 'B':
+          base = "binary";
+          break;
+        case 'o':
+        case 'O':
+          base = "octal";
+          break;
+        default:
+          break;
+        }
+        if (base != nullptr) {
+          return CalcError{ErrorKind::UnexpectedChar,
+                           std::string(base) + " literals arent supported",
+                           SourceSpan{i, 2}};
+        }
+      }
+
+      // a second decimal point: 1.2.3 reads as 1.2 then .3, which downstream
+      // looks like trailing input. point at the offending dot instead.
+      if (end < n && input[end] == '.') {
+        return CalcError{ErrorKind::UnexpectedChar,
+                         "a number cant have more than one decimal point",
+                         SourceSpan{end, 1}};
+      }
+
       tok.type = TokenType::Num;
       tok.value = value; // the parsed number, or 0 on an underflow
-      tok.length = static_cast<std::size_t>(fc.ptr - first);
+      tok.length = len;
       tokens.push_back(tok);
-      i += tok.length;
+      i += len;
       continue;
     }
 
