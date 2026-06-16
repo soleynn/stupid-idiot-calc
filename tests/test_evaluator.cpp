@@ -177,6 +177,23 @@ TEST_CASE("evaluate reports divide by zero instead of infinity") {
   REQUIRE(error_kind_of("5 / (3 - 3)") == ErrorKind::DivideByZero);
 }
 
+TEST_CASE("a runtime error carries a source location for its caret") {
+  // divide-by-zero / domain / overflow used to come back locationless; each now
+  // points at the operator or function that failed, within the input bounds.
+  Environment env;
+  for (const char *expr :
+       {"1 / 0", "5 % 0", "sqrt(-1)", "ln(0)", "tan(90)", "10 ^ 400",
+        "1e308 * 1e308", "0 ^ -1", "xyz", "foo(2)"}) {
+    CAPTURE(expr);
+    const auto result = evaluate(expr, env);
+    REQUIRE_FALSE(result.has_value());
+    const SourceSpan span = result.error().span;
+    // not the {0,0} "no location" sentinel, and inside the input bounds.
+    REQUIRE_FALSE((span.offset == 0u && span.length == 0u));
+    REQUIRE(span.offset + span.length <= std::string_view(expr).size());
+  }
+}
+
 TEST_CASE("an error in a sub-expression bubbles up to the top") {
   // a 1/0 buried in a left operand, a right operand, and a unary operand: the
   // error has to propagate back out through each kind of parent node.

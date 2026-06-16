@@ -82,12 +82,14 @@ private:
     DepthGuard guard(*this);
     ExprPtr left = parse_term();
     while (peek().type == TokenType::Plus || peek().type == TokenType::Minus) {
-      const BinaryOpKind op = advance().type == TokenType::Plus
+      const Token &op_tok = advance();
+      const SourceSpan op_span{op_tok.offset, op_tok.length};
+      const BinaryOpKind op = op_tok.type == TokenType::Plus
                                   ? BinaryOpKind::Add
                                   : BinaryOpKind::Subtract;
       ExprPtr right = parse_term();
       left = std::make_unique<Expr>(
-          BinaryOp{op, std::move(left), std::move(right)});
+          BinaryOp{op, std::move(left), std::move(right), op_span});
     }
     return left;
   }
@@ -97,8 +99,10 @@ private:
     ExprPtr left = parse_unary();
     while (peek().type == TokenType::Star || peek().type == TokenType::Slash ||
            peek().type == TokenType::Percent) {
+      const Token &op_tok = advance();
+      const SourceSpan op_span{op_tok.offset, op_tok.length};
       BinaryOpKind op;
-      switch (advance().type) {
+      switch (op_tok.type) {
       case TokenType::Slash:
         op = BinaryOpKind::Divide;
         break;
@@ -111,7 +115,7 @@ private:
       }
       ExprPtr right = parse_unary();
       left = std::make_unique<Expr>(
-          BinaryOp{op, std::move(left), std::move(right)});
+          BinaryOp{op, std::move(left), std::move(right), op_span});
     }
     return left;
   }
@@ -136,10 +140,11 @@ private:
   ExprPtr parse_power() {
     ExprPtr base = parse_primary();
     if (peek().type == TokenType::Caret) {
-      advance();
+      const Token &op_tok = advance();
+      const SourceSpan op_span{op_tok.offset, op_tok.length};
       ExprPtr exponent = parse_unary();
-      return std::make_unique<Expr>(
-          BinaryOp{BinaryOpKind::Power, std::move(base), std::move(exponent)});
+      return std::make_unique<Expr>(BinaryOp{
+          BinaryOpKind::Power, std::move(base), std::move(exponent), op_span});
     }
     return base;
   }
@@ -153,11 +158,12 @@ private:
     }
     if (t.type == TokenType::Ident) {
       std::string name = t.text;
+      const SourceSpan name_span{t.offset, t.length};
       advance();
       if (peek().type == TokenType::LParen) {
-        return parse_call(std::move(name));
+        return parse_call(std::move(name), name_span);
       }
-      return std::make_unique<Expr>(Variable{std::move(name)});
+      return std::make_unique<Expr>(Variable{std::move(name), name_span});
     }
     if (t.type == TokenType::LParen) {
       advance();
@@ -185,7 +191,7 @@ private:
   // a function call, entered with the name already consumed and '(' next. reads
   // the comma-separated argument list (which may be empty) up to the ')'. the
   // name and the argument count arent checked here; thats the evaluator's job.
-  ExprPtr parse_call(std::string name) {
+  ExprPtr parse_call(std::string name, SourceSpan name_span) {
     advance(); // the '('
     ++open_parens_;
     std::vector<ExprPtr> args;
@@ -199,7 +205,7 @@ private:
     expect(TokenType::RParen, ErrorKind::UnbalancedParen, "expected ')'");
     --open_parens_;
     return std::make_unique<Expr>(
-        FunctionCall{std::move(name), std::move(args)});
+        FunctionCall{std::move(name), std::move(args), name_span});
   }
 
   const Token &peek() const { return tokens_[pos_]; }

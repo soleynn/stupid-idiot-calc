@@ -38,6 +38,16 @@ Result<Number> checked(Number value) {
   return value;
 }
 
+// stamp a source span onto an error that doesnt already carry one, so a runtime
+// failure (divide-by-zero, a domain error, overflow) points a caret at the
+// operator or function that produced it, the way a parse error does.
+CalcError at(CalcError error, const SourceSpan &span) {
+  if (error.span.offset == 0 && error.span.length == 0) {
+    error.span = span;
+  }
+  return error;
+}
+
 // the built-in constants. resolved right here, not in the (still empty)
 // Environment; user-defined names come later and will layer on top.
 constexpr Number kPi = 3.14159265358979323846;
@@ -270,7 +280,7 @@ struct Evaluator {
       } else if (const auto *v = std::get_if<Variable>(&e.node)) {
         Result<Number> resolved = variable(*v);
         if (!resolved) {
-          return resolved.error();
+          return at(resolved.error(), v->span);
         }
         value = resolved.value();
         stack.pop_back();
@@ -297,7 +307,7 @@ struct Evaluator {
           const Number c = value;
           Result<Number> out = apply_binary(b->op, a, c);
           if (!out) {
-            return out.error();
+            return at(out.error(), b->span);
           }
           step(format_number(a) + " " + op_symbol(b->op) + " " +
                format_number(c) + " = " + format_number(out.value()));
@@ -312,12 +322,13 @@ struct Evaluator {
           const UnaryFn fn = lookup_function(to_lower(call.name));
           if (fn == nullptr) {
             return CalcError{ErrorKind::UnknownName,
-                             "unknown function '" + call.name + "'"};
+                             "unknown function '" + call.name + "'", call.span};
           }
           if (call.args.size() != 1) {
             return CalcError{ErrorKind::WrongArgCount,
                              call.name + " takes 1 argument but got " +
-                                 std::to_string(call.args.size())};
+                                 std::to_string(call.args.size()),
+                             call.span};
           }
           f.stage = 1;
           stack.push_back({call.args[0].get(), 0, 0.0});
@@ -325,7 +336,7 @@ struct Evaluator {
           const UnaryFn fn = lookup_function(to_lower(call.name));
           Result<Number> out = fn(value);
           if (!out) {
-            return out.error();
+            return at(out.error(), call.span);
           }
           step(call.name + "(" + format_number(value) +
                ") = " + format_number(out.value()));
