@@ -109,6 +109,20 @@ TEST_CASE("trig functions work in degrees") {
   REQUIRE(value_of("tan(45)") == Catch::Approx(1.0));
 }
 
+TEST_CASE("large-angle trig reduces the angle in degrees first") {
+  // a whole multiple of 360 folds to exactly 0, so no tiny residue leaks out.
+  REQUIRE(value_of("sin(360)") == 0.0);
+  REQUIRE(value_of("sin(720)") == 0.0);
+  REQUIRE(value_of("sin(-360)") == 0.0);
+  REQUIRE(value_of("cos(360)") == 1.0);
+  // a huge angle matches a degree-mod-360 reference instead of drifting in the
+  // 4th significant figure the way the old radians-first multiply did.
+  REQUIRE(value_of("sin(1e15)") ==
+          Catch::Approx(-0.9848077530122081).epsilon(1e-9));
+  REQUIRE(value_of("cos(1e10)") ==
+          Catch::Approx(0.17364817766692997).epsilon(1e-9));
+}
+
 TEST_CASE("function arguments are evaluated and their errors propagate") {
   REQUIRE(value_of("sqrt(abs(-9))") == 3.0); // nested calls
   REQUIRE(error_kind_of("sqrt(1 / 0)") == ErrorKind::DivideByZero);

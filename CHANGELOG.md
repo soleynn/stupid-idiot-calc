@@ -58,6 +58,10 @@ versioning](https://semver.org/).
 - a number literal too small for a double (`1e-400`, `1e-500`) now reads as `0`
   instead of being rejected as "number is out of range" — that message is kept
   for a real overflow like `1e400`, which is a different thing.
+- large-angle trig is accurate again: the angle is reduced mod 360 in degrees
+  (exactly) before converting to radians, so `sin(360)` is `0`, and `sin(1e15)`
+  / `cos(1e10)` no longer drift in the 4th significant figure. small and whole
+  angles are unchanged.
 
 ## [0.1.0] - 2026-06-16
 
