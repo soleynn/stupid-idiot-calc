@@ -7,22 +7,65 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  # the same ci preset (ninja + the warning set) built and tested on linux, macos
+  # and windows. only linux fails the build on a warning (-Werror); macos and
+  # windows still have uncleared apple-clang / msvc warnings, so they compile +
+  # test without -Werror for now - flip a leg to ON once its warnings are gone.
+  # the `build` job below folds these three legs into one check; thats the stable
+  # name branch protection gates on, so the matrix can gain/drop an os freely.
+  build-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            werror: "ON"
+          - os: macos-latest
+            werror: "OFF"
+          - os: windows-latest
+            werror: "OFF"
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: install ninja
+      - name: install ninja (linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
+      - name: install ninja (macos)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: set up msvc (windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      - name: install ninja (windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
+
       - name: configure
-        run: cmake --preset ci
+        run: cmake --preset ci -DCALC_WARNINGS_AS_ERRORS=${{ matrix.werror }}
 
       - name: build
         run: cmake --build --preset ci
 
       - name: test
         run: ctest --preset ci
+
+  # the required check. green only when every leg of build-matrix is. branch
+  # protection requires `build`, so keeping that name on this aggregate job means
+  # the matrix can add or drop an os without ever touching the protection rule.
+  build:
+    if: always()
+    needs: [build-matrix]
+    runs-on: ubuntu-latest
+    steps:
+      - name: every build leg passed
+        run: |
+          result='${{ needs.build-matrix.result }}'
+          echo "build matrix result: $result"
+          test "$result" = success
 
   # advisory asan/ubsan run; not a required check, so a red x here doesnt block.
   sanitize:
