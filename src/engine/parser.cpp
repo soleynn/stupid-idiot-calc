@@ -21,11 +21,12 @@ namespace {
 // count too. both come back as a CalcError, not a crash. neither limit is
 // reachable by a human typing at the repl.
 //
-// note: freeing a near-cap flat tree recurses ~kMaxTokens/2 deep in ~Expr, so
-// the teardown stack budget scales with kMaxTokens. its comfortable on the
-// usual 8mb main-thread stack (where the engine runs today); a front-end that
-// ever drives the engine from a small-stack worker should size that stack to
-// match, or drop this cap.
+// note: a near-cap flat tree is ~kMaxTokens/2 deep, and that depth is walked
+// recursively twice - once by eval() (which has no separate guard of its own)
+// and once by ~Expr when the tree is freed - so the stack budget scales with
+// kMaxTokens. its comfortable on the usual 8mb main-thread stack (where the
+// engine runs today); a front-end that ever drives the engine from a
+// small-stack worker should size that stack to match, or drop this cap.
 constexpr int kMaxDepth = 256;
 constexpr std::size_t kMaxTokens = 4096;
 

@@ -142,57 +142,19 @@ TEST_CASE("evaluate matches an independent reference on random trees") {
   REQUIRE(ok);
 }
 
-TEST_CASE("multiplication binds tighter than addition") {
-  const bool ok = rc::check("a + b * c == a + (b * c)", []() {
-    const long a = *rc::gen::inRange<long>(1, 101);
-    const long b = *rc::gen::inRange<long>(1, 101);
-    const long c = *rc::gen::inRange<long>(1, 101);
-    const Result<Number> bare = ev(s(a) + " + " + s(b) + " * " + s(c));
-    const Result<Number> paren = ev(s(a) + " + (" + s(b) + " * " + s(c) + ")");
-    RC_ASSERT(bare.has_value() && paren.has_value());
-    RC_ASSERT(bare.value() == paren.value());
-  });
-  REQUIRE(ok);
-}
-
-TEST_CASE("subtraction is left-associative") {
-  const bool ok = rc::check("a - b - c == (a - b) - c", []() {
-    const long a = *rc::gen::inRange<long>(1, 1000);
-    const long b = *rc::gen::inRange<long>(1, 1000);
-    const long c = *rc::gen::inRange<long>(1, 1000);
-    const Result<Number> bare = ev(s(a) + " - " + s(b) + " - " + s(c));
-    const Result<Number> paren = ev("(" + s(a) + " - " + s(b) + ") - " + s(c));
-    RC_ASSERT(bare.has_value() && paren.has_value());
-    RC_ASSERT(bare.value() == paren.value());
-  });
-  REQUIRE(ok);
-}
-
-TEST_CASE("exponent is right-associative") {
-  const bool ok = rc::check("a ^ b ^ c == a ^ (b ^ c)", []() {
-    const long a = *rc::gen::inRange<long>(2, 5); // 2..4
-    const long b = *rc::gen::inRange<long>(1, 4); // 1..3
-    const long c = *rc::gen::inRange<long>(1, 4); // 1..3, keeps it finite
-    const Result<Number> bare = ev(s(a) + " ^ " + s(b) + " ^ " + s(c));
-    const Result<Number> paren = ev(s(a) + " ^ (" + s(b) + " ^ " + s(c) + ")");
-    RC_ASSERT(bare.has_value() && paren.has_value());
-    RC_ASSERT(bare.value() == paren.value());
-  });
-  REQUIRE(ok);
-}
-
-TEST_CASE("addition and multiplication commute") {
-  const bool ok = rc::check("a + b == b + a and a * b == b * a", []() {
-    const long a = *rc::gen::inRange<long>(-1000, 1001);
-    const long b = *rc::gen::inRange<long>(-1000, 1001);
-    const Result<Number> add1 = ev(s(a) + " + " + s(b));
-    const Result<Number> add2 = ev(s(b) + " + " + s(a));
-    const Result<Number> mul1 = ev(s(a) + " * " + s(b));
-    const Result<Number> mul2 = ev(s(b) + " * " + s(a));
-    RC_ASSERT(add1.has_value() && add2.has_value());
-    RC_ASSERT(add1.value() == add2.value());
-    RC_ASSERT(mul1.has_value() && mul2.has_value());
-    RC_ASSERT(mul1.value() == mul2.value());
+TEST_CASE("multiplication distributes over addition") {
+  // unlike commutativity (true for any IEEE-754 double regardless of the
+  // engine), distributivity exercises precedence and several ops at once. the
+  // -100..100 range keeps every intermediate an exact integer, so == is safe.
+  const bool ok = rc::check("a * (b + c) == a * b + a * c", []() {
+    const long a = *rc::gen::inRange<long>(-100, 101);
+    const long b = *rc::gen::inRange<long>(-100, 101);
+    const long c = *rc::gen::inRange<long>(-100, 101);
+    const Result<Number> lhs = ev(s(a) + " * (" + s(b) + " + " + s(c) + ")");
+    const Result<Number> rhs =
+        ev(s(a) + " * " + s(b) + " + " + s(a) + " * " + s(c));
+    RC_ASSERT(lhs.has_value() && rhs.has_value());
+    RC_ASSERT(lhs.value() == rhs.value());
   });
   REQUIRE(ok);
 }

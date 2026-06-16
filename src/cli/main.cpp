@@ -22,12 +22,12 @@
 #include <isocline.h>
 
 #include "crash_handler.hpp" // sibling header, not part of the public api
+#include "logger.hpp"        // ditto: a cli-private leveled logger
 
 #include "calc/diagnostic.hpp"
 #include "calc/environment.hpp"
 #include "calc/error.hpp"
 #include "calc/evaluator.hpp"
-#include "calc/logger.hpp"
 #include "calc/number.hpp"
 #include "calc/output_formatter.hpp"
 #include "calc/result.hpp"
@@ -150,49 +150,44 @@ int run_once(const std::string &expression, bool trace) {
   return kExitUserError;
 }
 
-// isocline calls these back as C function pointers, so they need C language
-// linkage; static keeps them file-local. they drive tab-completion in the repl.
-
-extern "C" {
-
-// what counts as one "word" for completion. isocline's default treats ':' as a
-// separator, which would strip the colon off ':help'; we keep ':' (and '_') in
-// the word so the leading-colon commands complete as a unit.
-static bool is_calc_word_char(const char *s, long len) {
-  if (len != 1) {
-    return false;
+// cxxopts reads any leading-'-' token as an option, so a one-shot expression
+// like "-5" or "-pi" gets rejected as an unknown flag. walk past the flags we
+// actually define (and the value --log-level takes) and drop a "--" in front of
+// the first token that isnt one, so the rest is taken literally as the
+// expression. a user-supplied "--" is left alone.
+std::vector<std::string> with_positional_guard(int argc, char **argv) {
+  std::vector<std::string> out;
+  out.reserve(static_cast<std::size_t>(argc) + 1);
+  bool split = false; // have we crossed from flags into the expression yet?
+  for (int i = 0; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (i == 0 || split) { // the program name, or already past the "--"
+      out.push_back(arg);
+      continue;
+    }
+    if (arg == "--") { // the user separated it themselves
+      split = true;
+      out.push_back(arg);
+      continue;
+    }
+    if (arg == "-h" || arg == "--help" || arg == "-v" || arg == "--version" ||
+        arg == "-t" || arg == "--trace" || arg.rfind("--log-level=", 0) == 0) {
+      out.push_back(arg);
+      continue;
+    }
+    if (arg == "--log-level") { // takes its value as the next token
+      out.push_back(arg);
+      if (i + 1 < argc) {
+        out.push_back(argv[++i]);
+      }
+      continue;
+    }
+    out.push_back("--"); // first non-flag token: the expression starts here
+    out.push_back(arg);
+    split = true;
   }
-  const char c = s[0];
-  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-         (c >= '0' && c <= '9') || c == '_' || c == ':';
+  return out;
 }
-
-// the things worth completing. there's no shared table, so this is kept in sync
-// BY HAND with three sources of truth - update it when any of them change:
-//   - repl commands: the ':' dispatch in run_repl below
-//   - functions + constants: lookup_function / lookup_constant in evaluator.cpp
-//   - session + memory names: is_reserved / match_memory_command in
-//   evaluator.cpp
-// memory ops are spelled uppercase to match :help; matching is
-// case-insensitive.
-static void add_calc_words(ic_completion_env_t *cenv, const char *prefix) {
-  static const char *words[] = {
-      ":help",  ":quit",  ":clear", ":history", ":vars",
-      ":trace", ":stats",                               // repl commands
-      "M+",     "M-",     "MR",     "MC",               // memory
-      "sqrt",   "sin",    "cos",    "tan",      "abs",  //
-      "ln",     "log",    "exp",    "floor",    "ceil", // built-in functions
-      "pi",     "e",      "ans",    "let", // constants + session names
-      nullptr};
-  ic_add_completions(cenv, prefix, words);
-}
-
-static void repl_completer(ic_completion_env_t *cenv, const char *input) {
-  // complete just the token under the cursor, using our word definition.
-  ic_complete_word(cenv, input, &add_calc_words, &is_calc_word_char);
-}
-
-} // extern "C"
 
 // the shared state a meta-command may read or poke. references so a handler can
 // flip `trace`/`quit` and the loop sees it.
@@ -215,6 +210,54 @@ struct ReplCommand {
 };
 
 const std::vector<ReplCommand> &commands(); // defined below; :help walks it
+
+// isocline calls these back as C function pointers, so they need C language
+// linkage; static keeps them file-local. they drive tab-completion in the repl.
+
+extern "C" {
+
+// what counts as one "word" for completion. isocline's default treats ':' as a
+// separator, which would strip the colon off ':help'; we keep ':' (and '_') in
+// the word so the leading-colon commands complete as a unit.
+static bool is_calc_word_char(const char *s, long len) {
+  if (len != 1) {
+    return false;
+  }
+  const char c = s[0];
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9') || c == '_' || c == ':';
+}
+
+// the things worth completing. the ':' commands come straight from the one
+// command table - so aliases like :h / :q complete too and a new command needs
+// no edit here - while the rest is hand-listed in step with evaluator.cpp's
+// lookup_function / lookup_constant / match_memory_command. memory ops are
+// spelled uppercase to match :help; matching is case-insensitive.
+static void add_calc_words(ic_completion_env_t *cenv, const char *prefix) {
+  static const char *words[] = {
+      "M+",   "M-",  "MR",  "MC",            // memory
+      "sqrt", "sin", "cos", "tan",   "abs",  //
+      "ln",   "log", "exp", "floor", "ceil", // built-in functions
+      "pi",   "e",   "ans", "let",           // constants + session names
+      nullptr};
+  ic_add_completions(cenv, prefix, words);
+
+  std::vector<const char *> cmds;
+  for (const ReplCommand &c : commands()) {
+    for (const std::string &name : c.names) {
+      cmds.push_back(name.c_str()); // commands() is static, so these stay valid
+    }
+  }
+  cmds.push_back(nullptr);
+  ic_add_completions(cenv, prefix, cmds.data());
+}
+
+static void repl_completer(ic_completion_env_t *cenv, const char *input) {
+  // complete just the token under the cursor, using our word definition.
+  ic_complete_word(cenv, input, &add_calc_words, &is_calc_word_char);
+}
+
+} // extern "C"
 
 void cmd_help(ReplState &, const std::string &) {
   std::cout << "type an expression and hit enter.\n"
@@ -332,12 +375,16 @@ int run_repl(bool trace) {
   ic_set_default_completer(&repl_completer, nullptr);
 
   LOG_INFO("repl started");
-  std::cout << "stupid idiot calc. :help for help, :quit to leave.\n";
+  // the banner is interactive chrome, not a result, so keep it off stdout: a
+  // piped session then gets only the answers.
+  std::cerr << "stupid idiot calc. :help for help, :quit to leave.\n";
 
   while (!quit) {
     char *raw = ic_readline(""); // the marker supplies the "> " prompt
     if (raw == nullptr) {        // ctrl-d / ctrl-c / end of piped input
-      std::cout << "\n";         // tidy newline, same as before
+      if (color_out) {
+        std::cout << "\n"; // tidy the cursor line, but only in a terminal
+      }
       break;
     }
     const std::string trimmed = trim(raw);
@@ -394,6 +441,9 @@ int run_repl(bool trace) {
 
 int main(int argc, char **argv) {
   calc::cli::install_crash_handler();
+  // flush each log line as its written: the crash handler exits via _Exit,
+  // which skips stream flushing, so anything still buffered would be lost.
+  std::clog << std::unitbuf;
 
   // the whole body is wrapped so a cxxopts parse/lookup error comes back as a
   // clean user error (exit 2) instead of escaping main and tripping the crash
@@ -411,7 +461,14 @@ int main(int argc, char **argv) {
     options.positional_help("[expression]");
     options.parse_positional({"expression"});
 
-    const cxxopts::ParseResult args = options.parse(argc, argv);
+    const std::vector<std::string> guarded = with_positional_guard(argc, argv);
+    std::vector<const char *> gargv;
+    gargv.reserve(guarded.size());
+    for (const std::string &word : guarded) {
+      gargv.push_back(word.c_str());
+    }
+    const cxxopts::ParseResult args =
+        options.parse(static_cast<int>(gargv.size()), gargv.data());
 
     if (args.count("help") != 0) {
       std::cout << options.help();

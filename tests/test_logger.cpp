@@ -5,7 +5,7 @@
 #include <sstream>
 #include <string>
 
-#include "calc/logger.hpp"
+#include "logger.hpp"
 
 using namespace calc;
 

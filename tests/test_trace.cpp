@@ -74,7 +74,9 @@ TEST_CASE("names resolve to their value in the trace") {
 TEST_CASE("a failing eval stops and says so") {
   const std::string t = trace_of("1 / 0");
   REQUIRE(t.find("stopped at an error") != npos);
-  REQUIRE(t.find("= 0 in") == npos); // no successful final-value line
+  // no successful final-value line at all: that line is the only one that
+  // starts with "  = ", whatever the value, so this catches any leak.
+  REQUIRE(t.find("  = ") == npos);
 }
 
 TEST_CASE("a let traces the right-hand side") {

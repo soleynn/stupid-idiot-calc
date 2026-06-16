@@ -7,9 +7,10 @@
 #include <fmt/format.h>
 
 // a tiny leveled logger for the *front-end's* dev output. it writes to
-// std::clog (stderr), so its NOT for the engine: calc_core stays i/o-free and
-// never includes this. the call sites are spdlog-shaped on purpose, so if a
-// file or async sink is ever wanted, swapping the body for spdlog stays
+// std::clog (stderr), so it lives here under src/cli (a cli-private header,
+// like crash_handler.hpp) and never in the engine's public include tree:
+// calc_core stays i/o-free. the call sites are spdlog-shaped on purpose, so if
+// a file or async sink is ever wanted, swapping the body for spdlog stays
 // mechanical.
 
 namespace calc {
