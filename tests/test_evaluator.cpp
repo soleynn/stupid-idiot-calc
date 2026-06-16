@@ -106,6 +106,25 @@ TEST_CASE("domain errors come back as errors, not nan") {
   REQUIRE(error_kind_of("ln(0)") == ErrorKind::DomainError);
 }
 
+TEST_CASE("tan at its poles is a domain error, not a huge finite number") {
+  REQUIRE(error_kind_of("tan(90)") == ErrorKind::DomainError);
+  REQUIRE(error_kind_of("tan(270)") == ErrorKind::DomainError);
+  REQUIRE(error_kind_of("tan(-90)") == ErrorKind::DomainError);
+}
+
+TEST_CASE("a negative base to a fractional power is a domain error, not nan") {
+  REQUIRE(error_kind_of("(-2) ^ 0.5") == ErrorKind::DomainError);
+  REQUIRE(error_kind_of("(-8) ^ (1 / 3)") == ErrorKind::DomainError);
+  REQUIRE(value_of("(-2) ^ 3") ==
+          -8.0); // a whole-number exponent is still fine
+}
+
+TEST_CASE("constants and functions resolve regardless of case") {
+  REQUIRE(value_of("PI") == Catch::Approx(3.14159265358979));
+  REQUIRE(value_of("SQRT(9)") == 3.0);
+  REQUIRE(value_of("Abs(-4)") == 4.0);
+}
+
 TEST_CASE("an overflowing function result is caught, not returned as inf") {
   REQUIRE(error_kind_of("exp(1000)") == ErrorKind::Overflow);
 }

@@ -24,11 +24,15 @@ namespace calc {
 
 namespace {
 
-// catch a result that ran past what a double can hold. two finite numbers can
-// still multiply/add up to +/-inf, and we hand that back as an error instead of
-// letting a silent inf leak out.
+// catch a result a double cant represent. two finite numbers can multiply/add
+// up to +/-inf (an overflow), and a few ops produce nan (an undefined result,
+// like a negative base to a fractional power). either way we hand back an error
+// instead of letting a silent inf/nan leak out.
 Result<Number> checked(Number value) {
-  if (!std::isfinite(value)) {
+  if (std::isnan(value)) {
+    return CalcError{ErrorKind::DomainError, "undefined result"};
+  }
+  if (std::isinf(value)) {
     return CalcError{ErrorKind::Overflow, "result is too large"};
   }
   return value;
@@ -83,7 +87,15 @@ Result<Number> fn_log(Number x) {
 
 Result<Number> fn_sin(Number x) { return checked(std::sin(x * kDegToRad)); }
 Result<Number> fn_cos(Number x) { return checked(std::cos(x * kDegToRad)); }
-Result<Number> fn_tan(Number x) { return checked(std::tan(x * kDegToRad)); }
+Result<Number> fn_tan(Number x) {
+  // tan blows up at 90, 270, ... where the true value is infinite; a double
+  // cant land exactly on the pole, so std::tan would hand back a huge finite
+  // number instead of erroring. reject those angles (exact for whole degrees).
+  if (std::fmod(std::fabs(x), 180.0) == 90.0) {
+    return CalcError{ErrorKind::DomainError, "tan is undefined at this angle"};
+  }
+  return checked(std::tan(x * kDegToRad));
+}
 Result<Number> fn_abs(Number x) { return checked(std::fabs(x)); }
 Result<Number> fn_exp(Number x) { return checked(std::exp(x)); }
 Result<Number> fn_floor(Number x) { return checked(std::floor(x)); }
@@ -160,6 +172,10 @@ Result<Number> apply_binary(BinaryOpKind op, Number a, Number c) {
     }
     return checked(std::fmod(a, c));
   case BinaryOpKind::Power:
+    if (a < 0.0 && std::floor(c) != c) {
+      return CalcError{ErrorKind::DomainError,
+                       "cant raise a negative number to a fractional power"};
+    }
     return checked(std::pow(a, c));
   }
   CALC_ASSERT(false, "every binary op kind is handled above");
@@ -186,20 +202,25 @@ struct EvalVisitor {
   }
 
   Result<Number> operator()(const Variable &v) const {
+    // built-in names (ans, the memory register, pi/e) resolve
+    // case-insensitively to match is_reserved; user `let` names keep the exact
+    // case they were bound with.
+    const std::string lower = to_lower(v.name);
     Number value = 0.0;
     bool found = false;
-    if (v.name == "ans") {
+    if (lower == "ans") {
       value = env.answer();
       found = true;
-    } else {
-      const std::string lower = to_lower(v.name);
-      if (lower == "m" || lower == "mr") { // memory recall
-        value = env.memory();
-        found = true;
-      } else if (lookup_constant(v.name, value) ||
-                 env.lookup_variable(v.name, value)) {
-        found = true; // a built-in constant, else a let-bound variable
+    } else if (lower == "m" || lower == "mr") { // memory recall
+      const Result<Number> mem = checked(env.memory());
+      if (!mem) {
+        return mem.error(); // the register overflowed at some point
       }
+      value = mem.value();
+      found = true;
+    } else if (lookup_constant(lower, value) ||
+               env.lookup_variable(v.name, value)) {
+      found = true; // a built-in constant, else a let-bound variable
     }
     if (!found) {
       return CalcError{ErrorKind::UnknownName, "unknown name '" + v.name + "'"};
@@ -238,7 +259,7 @@ struct EvalVisitor {
   }
 
   Result<Number> operator()(const FunctionCall &call) const {
-    const UnaryFn fn = lookup_function(call.name);
+    const UnaryFn fn = lookup_function(to_lower(call.name));
     if (fn == nullptr) {
       return CalcError{ErrorKind::UnknownName,
                        "unknown function '" + call.name + "'"};
@@ -340,7 +361,7 @@ struct TreeRenderer {
     recurse(*b.rhs);
   }
   void operator()(const FunctionCall &c) const {
-    line(c.name + "()");
+    line(c.args.empty() ? c.name + "()" : c.name + "(...)");
     for (const ExprPtr &arg : c.args) {
       recurse(*arg);
     }
@@ -482,10 +503,12 @@ Result<Number> evaluate(std::string_view input, Environment &env,
       env.memory_clear();
       break;
     }
-    return env.memory(); // show the register; a memory op leaves `ans` alone
+    // show the register; a memory op leaves `ans` alone. checked() so an
+    // overflowed register comes back as an error, never a silent inf.
+    return checked(env.memory());
   }
 
-  if (tokens[0].type == TokenType::Ident && tokens[0].text == "let") {
+  if (tokens[0].type == TokenType::Ident && to_lower(tokens[0].text) == "let") {
     return eval_let(tokens, env, tracer);
   }
 

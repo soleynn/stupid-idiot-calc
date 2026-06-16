@@ -21,5 +21,5 @@ add_library(calc_core STATIC
   diagnostic.cpp)
 
 target_include_directories(calc_core PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(calc_core PUBLIC calc_sanitizers calc_coverage
+target_link_libraries(calc_core PUBLIC calc_sanitizers calc_coverage calc_fuzzer
                                 PRIVATE calc_warnings calc_strict fmt::fmt)

@@ -11,6 +11,10 @@
 // sanitizers catch here is a genuine bug. built clang-only with
 // -fsanitize=fuzzer; never part of the gcc `build` gate.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, std::size_t size) {
+  if (size == 0) {
+    return 0; // libFuzzer may pass a null pointer here; dont build a string off
+              // it
+  }
   const std::string input(reinterpret_cast<const char *>(data), size);
   calc::Environment env;
   (void)calc::evaluate(input, env);

@@ -51,8 +51,24 @@ if(CALC_ENABLE_COVERAGE AND NOT MSVC)
   target_link_options(calc_coverage INTERFACE --coverage)
 endif()
 
+# coverage instrumentation for the libFuzzer harness. the engine UNDER TEST has
+# to be built with -fsanitize=fuzzer-no-link so libFuzzer gets the edge-coverage
+# feedback it steers mutation with; the harness exe itself adds -fsanitize=fuzzer
+# (which brings its own main). calc_core links this, so without it the fuzzer is
+# coverage-blind on the grammar and degrades to random input.
+add_library(calc_fuzzer INTERFACE)
+if(CALC_ENABLE_FUZZERS AND NOT MSVC)
+  target_compile_options(calc_fuzzer INTERFACE -fsanitize=fuzzer-no-link)
+endif()
+
 add_subdirectory(src/engine)
-add_subdirectory(src/cli)
+
+# the cli front-end (and its cxxopts/isocline fetches) isnt needed for a
+# fuzz-only configure, which builds just the harness against calc_core; skip it
+# there so that job doesnt clone deps it never links.
+if(NOT (CALC_ENABLE_FUZZERS AND NOT CALC_BUILD_TESTS))
+  add_subdirectory(src/cli)
+endif()
 
 # clang-only libFuzzer harnesses, off by default and built apart from the test
 # suite (so the fuzz ci job doesnt drag in catch2/rapidcheck).

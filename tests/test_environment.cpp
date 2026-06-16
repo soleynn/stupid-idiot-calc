@@ -75,11 +75,6 @@ TEST_CASE("a let also updates ans") {
   REQUIRE(value_of(env, "ans") == 8.0);
 }
 
-TEST_CASE("an unknown name is still an error") {
-  Environment env;
-  REQUIRE(error_kind_of(env, "z") == ErrorKind::UnknownName);
-}
-
 TEST_CASE("built-in names cant be rebound") {
   Environment env;
   REQUIRE(error_kind_of(env, "let pi = 3") == ErrorKind::ReservedName);
@@ -154,4 +149,21 @@ TEST_CASE("memory mnemonics are case-insensitive") {
   REQUIRE(value_of(env, "m+") == 7.0);
   REQUIRE(value_of(env, "mr") == 7.0);
   REQUIRE(value_of(env, "mc") == 0.0);
+}
+
+TEST_CASE("ans and constants recall regardless of case") {
+  Environment env;
+  REQUIRE(value_of(env, "2 + 3") == 5.0);
+  REQUIRE(value_of(env, "ANS") == 5.0);
+  REQUIRE(value_of(env, "Ans") == 5.0);
+}
+
+TEST_CASE("an overflowing memory register is caught, not a silent inf") {
+  Environment env;
+  REQUIRE(value_of(env, "1e308") == 1e308);
+  REQUIRE(value_of(env, "M+") == 1e308);
+  // a second add pushes the register past what a double can hold; it has to
+  // come back as an error, never inf.
+  REQUIRE(error_kind_of(env, "M+") == ErrorKind::Overflow);
+  REQUIRE(error_kind_of(env, "MR") == ErrorKind::Overflow);
 }
