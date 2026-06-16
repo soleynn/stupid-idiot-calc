@@ -30,6 +30,15 @@ namespace {
 // work-stacks - see evaluator.cpp and ast.cpp), so the depth no longer charges
 // the native stack one frame per node. that keeps it within the small stacks
 // android/qt worker threads run on, not just the 8mb main-thread stack.
+//
+// kMaxDepth counts guard hits, not nesting levels, and the two differ by
+// construct. a paren or call level descends through both the expression guard
+// and the unary guard (primary -> expression -> ... -> unary -> ... ->
+// primary), so it costs two; a unary `-` only trips the unary guard, so it
+// costs one. the effective limit is therefore ~127 parens/calls deep but ~254
+// unary deep. thats deliberate: a paren level recurses through more parser
+// functions, so charging it double keeps the actual stack depth roughly even
+// between the two. the exact 127/254 boundaries are pinned in test_parser.cpp.
 constexpr int kMaxDepth = 256;
 
 // thrown internally for a convenient early-return out of the recursion, and
