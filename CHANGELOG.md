@@ -46,6 +46,10 @@ versioning](https://semver.org/).
   line used to balloon to a few hundred megabytes before the parser turned it
   down; now the token vector never grows past the cap. the error is the same
   "expression is too long" as before, just paid cheaply up front.
+- a long session no longer grows its retained history without bound: the repl's
+  `:history` log and the gui's history/recall lists are each capped at the last
+  1000 entries, so the oldest fall off instead of piling up one per evaluate for
+  the life of the session.
 
 ## [0.1.0] - 2026-06-16
 

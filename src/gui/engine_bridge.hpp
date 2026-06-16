@@ -26,6 +26,10 @@ class Engine : public QObject {
 public:
   explicit Engine(QObject *parent = nullptr);
 
+  // the ceiling on the retained history/inputs lists, so a long session cant
+  // grow them without bound. the oldest entries fall off once it's reached.
+  static constexpr int kMaxHistory = 1000;
+
   // evaluate one expression: returns the result line (or "error: ...") and
   // pushes "<expr>  =  <result>" onto the front of the history. invokable from
   // qml, called when the user hits `=`.

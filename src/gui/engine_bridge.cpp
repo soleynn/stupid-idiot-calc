@@ -17,10 +17,16 @@ QString Engine::evaluate(const QString &expression) {
       QString::fromStdString(calc::format_result(calc::evaluate(input, env_)));
 
   history_.prepend(expression + QStringLiteral("  =  ") + line);
+  if (history_.size() > kMaxHistory) {
+    history_.removeLast(); // drop the oldest, keep the most recent kMaxHistory
+  }
   emit historyChanged();
   // raw expression too, even if it errored - recall lets u up-arrow to a bad
   // line and fix it. stays index-aligned with history_.
   inputs_.prepend(expression);
+  if (inputs_.size() > kMaxHistory) {
+    inputs_.removeLast();
+  }
   emit inputsChanged();
   return line;
 }

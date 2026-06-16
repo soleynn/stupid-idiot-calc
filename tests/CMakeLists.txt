@@ -131,4 +131,12 @@ if(BASH_EXECUTABLE)
   add_test(NAME cli_stats COMMAND ${BASH_EXECUTABLE} -c
     "printf '2 + 2\\n:stats\\n:quit\\n' | $<TARGET_FILE:calc>")
   set_tests_properties(cli_stats PROPERTIES PASS_REGULAR_EXPRESSION "1 ok")
+
+  # a long session must not grow :history without bound. feed more lines than the
+  # cap (kMaxHistory = 1000 in main.cpp), then :history, and count the numbered
+  # entries it prints: capped it's exactly 1000, unbounded it would be 1051. the
+  # numbered ":history" lines lead with spaces; the bare eval results dont, so
+  # the grep counts only the history rows.
+  add_test(NAME cli_history_capped COMMAND ${BASH_EXECUTABLE} -c
+    "[ \"$({ seq 1050; printf ':history\\n:quit\\n'; } | $<TARGET_FILE:calc> 2>/dev/null | grep -cE '^ +[0-9]+  ')\" = '1000' ]")
 endif()
