@@ -10,15 +10,18 @@ import QtQuick.Layouts
 Button {
     id: key
 
-    // digit | function | operator | clear | backspace | equals
+    // digit | function | operator | sci | clear | backspace | equals
     property string role: "digit"
     readonly property bool filled: role === "equals"
 
     Layout.fillWidth: true
     Layout.fillHeight: true
-    Layout.minimumHeight: 56
+    // a low floor so the keypad can shrink its keys when the scientific panel
+    // opens (the window stays fixed); the grid sizes them above this in practice.
+    Layout.minimumHeight: 30
 
-    font.pixelSize: 24
+    // sci keys carry words like "floor"/"ceil", so they read a touch smaller.
+    font.pixelSize: role === "sci" ? 20 : 24
     font.bold: role === "operator" || filled
 
     readonly property color faceColor: {
@@ -32,6 +35,7 @@ Button {
         switch (role) {
         case "equals":    return Theme.crust
         case "operator":  return Theme.mauve
+        case "sci":       return Theme.blue
         case "clear":     return Theme.red
         case "backspace": return Theme.peach
         case "function":  return Theme.subtext0

@@ -10,18 +10,25 @@ ApplicationWindow {
     id: window
     visible: true
     width: 360
-    height: 600
+    height: 640
     minimumWidth: 300
-    minimumHeight: 520
+    minimumHeight: 560
     title: qsTr("stupid idiot calc")
     color: Theme.base
 
     // the expression the user is building up, tap by tap.
     property string expression: ""
+    // is the scientific function panel showing? collapsed by default.
+    property bool sciOpen: false
+    // height the panel takes when open. the keypad below shrinks by this much to
+    // make room - the window itself never resizes, the keys just get smaller (a
+    // phone cant grow, so neither does this).
+    readonly property int sciPanelHeight: 130
 
     Engine { id: engine }
 
     function tap(t) { window.expression += t }
+    function toggleSci() { window.sciOpen = !window.sciOpen }
     function clearAll() {
         window.expression = ""
         result.text = "0"
@@ -38,29 +45,36 @@ ApplicationWindow {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
-        spacing: 14
+        spacing: 12
 
         // the screen: a recessed mantle panel. history, the live expression and
         // the result climb through three brightness steps so the eye lands on
         // the answer.
         Rectangle {
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.minimumHeight: 150
+            // gives a little height back to the keys when the panel is open, so
+            // it isnt only the keypad that shrinks. animates in step with it.
+            Layout.preferredHeight: window.sciOpen ? 100 : 130
             radius: 18
             color: Theme.mantle
 
+            Behavior on Layout.preferredHeight {
+                NumberAnimation { duration: 200; easing.type: Easing.InOutCubic }
+            }
+
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 18
-                spacing: 6
+                anchors.margins: 12
+                spacing: 4
 
-                // past results, newest at the bottom (nearest the keys).
+                // past results, newest at the bottom (nearest the keys). min 0
+                // so it collapses when the screen is short (the function panel
+                // open, a small window) instead of pushing the result off-panel.
                 ListView {
                     id: historyView
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.minimumHeight: 40
+                    Layout.minimumHeight: 0
                     clip: true
                     model: engine.history
                     verticalLayoutDirection: ListView.BottomToTop
@@ -101,9 +115,95 @@ ApplicationWindow {
             }
         }
 
+        // reveals the functions the engine already has. collapsed by default so
+        // the basic keypad stays the clean thing u see first. "deg" flags that
+        // the trig keys work in degrees (theres no rad mode yet).
+        Button {
+            id: sciToggle
+            Layout.fillWidth: true
+            Layout.preferredHeight: 40
+            onClicked: window.toggleSci()
+
+            contentItem: Item {
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: window.sciOpen ? "ƒ(x)  ▴" : "ƒ(x)  ▾"
+                    font.pixelSize: 17
+                    font.bold: true
+                    color: Theme.blue
+                }
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("deg")
+                    font.pixelSize: 13
+                    color: Theme.overlay1
+                }
+            }
+            background: Rectangle {
+                radius: 12
+                color: sciToggle.down ? Qt.lighter(Theme.surface0, 1.3)
+                     : sciToggle.hovered ? Qt.lighter(Theme.surface0, 1.15)
+                     : Theme.surface0
+                border.width: sciToggle.activeFocus ? 2 : 0
+                border.color: Theme.lavender
+                Behavior on color { ColorAnimation { duration: 90 } }
+            }
+        }
+
+        // the scientific keys. the wrapper animates its height between 0 and the
+        // panel height and clips, so the panel slides open/shut; the keypad below
+        // (fillHeight) takes back exactly that much, shrinking its keys to fit.
+        // each key inserts a call ready for its argument (`sin(` etc.); pi/e drop
+        // in as bare names. blue marks the whole zone.
+        Item {
+            id: sciWrap
+            Layout.fillWidth: true
+            Layout.preferredHeight: window.sciOpen ? window.sciPanelHeight : 0
+            clip: true
+
+            Behavior on Layout.preferredHeight {
+                NumberAnimation { duration: 200; easing.type: Easing.InOutCubic }
+            }
+
+            GridLayout {
+                id: sciPanel
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: window.sciPanelHeight
+                columns: 4
+                rowSpacing: 8
+                columnSpacing: 10
+                opacity: window.sciOpen ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 160 } }
+
+                CalcButton { text: "sin";   role: "sci"; onClicked: window.tap("sin(") }
+                CalcButton { text: "cos";   role: "sci"; onClicked: window.tap("cos(") }
+                CalcButton { text: "tan";   role: "sci"; onClicked: window.tap("tan(") }
+                CalcButton { text: "√";     role: "sci"; onClicked: window.tap("sqrt(") }
+
+                CalcButton { text: "ln";    role: "sci"; onClicked: window.tap("ln(") }
+                CalcButton { text: "log";   role: "sci"; onClicked: window.tap("log(") }
+                CalcButton { text: "exp";   role: "sci"; onClicked: window.tap("exp(") }
+                CalcButton { text: "abs";   role: "sci"; onClicked: window.tap("abs(") }
+
+                CalcButton { text: "floor"; role: "sci"; onClicked: window.tap("floor(") }
+                CalcButton { text: "ceil";  role: "sci"; onClicked: window.tap("ceil(") }
+                CalcButton { text: "π";     role: "sci"; onClicked: window.tap("pi") }
+                CalcButton { text: "e";     role: "sci"; onClicked: window.tap("e") }
+            }
+        }
+
         // the keys. 4 columns; only `=` spans two. role colours each key.
+        // fillHeight so the keypad gives up room (smaller keys) when the panel
+        // opens and reclaims it when it shuts.
         GridLayout {
             Layout.fillWidth: true
+            Layout.fillHeight: true
             columns: 4
             rowSpacing: 10
             columnSpacing: 10
