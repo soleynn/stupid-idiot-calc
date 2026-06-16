@@ -189,6 +189,12 @@ std::vector<std::string> with_positional_guard(int argc, char **argv) {
   return out;
 }
 
+// the repl keeps a log of the lines u've typed, shown by :history. cap it so a
+// very long session (or piped input of millions of lines) cant grow it without
+// bound - the oldest entries fall off the front. this is separate from
+// isocline's own ~200-entry arrow-key recall ring, which is already bounded.
+constexpr std::size_t kMaxHistory = 1000;
+
 // the shared state a meta-command may read or poke. references so a handler can
 // flip `trace`/`quit` and the loop sees it.
 struct ReplState {
@@ -394,6 +400,10 @@ int run_repl(bool trace) {
       continue;
     }
     history.push_back(trimmed);
+    if (history.size() > kMaxHistory) {
+      history.erase(
+          history.begin()); // drop the oldest, keep the last kMaxHistory
+    }
 
     if (trimmed[0] == ':') {
       // split "<name> <arg...>": the colon-word, then the rest, trimmed.

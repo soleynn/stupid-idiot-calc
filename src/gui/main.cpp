@@ -36,8 +36,18 @@ int main(int argc, char *argv[]) {
   // gui actually computes without anyone clicking buttons.
   if (app.arguments().contains(QStringLiteral("--selftest"))) {
     calc::gui::Engine engine;
-    const bool ok =
+    bool ok =
         engine.evaluate(QStringLiteral("1 + 2 * 3")) == QStringLiteral("7");
+
+    // hammer past the history ceiling and confirm both retained lists stay
+    // bounded, rather than growing one entry per evaluate forever.
+    const int over = calc::gui::Engine::kMaxHistory + 100;
+    for (int i = 0; i < over; ++i) {
+      engine.evaluate(QStringLiteral("1"));
+    }
+    ok = ok && engine.history().size() == calc::gui::Engine::kMaxHistory &&
+         engine.inputs().size() == calc::gui::Engine::kMaxHistory;
+
     return ok ? 0 : 1;
   }
 
