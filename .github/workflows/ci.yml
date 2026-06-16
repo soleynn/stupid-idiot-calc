@@ -301,12 +301,15 @@ jobs:
           if (-not $zip) { throw "no .zip produced by cpack" }
           $out = Join-Path $env:RUNNER_TEMP "unpacked"
           Expand-Archive -Path $zip.FullName -DestinationPath $out -Force
+          Write-Host "=== archive tree ==="; Get-ChildItem -Path $out -Recurse -Name
           $exe = Get-ChildItem -Path $out -Recurse -Filter calc-gui.exe | Select-Object -First 1
           if (-not $exe) { throw "calc-gui.exe not found in archive" }
-          $dir = $exe.DirectoryName
-          Write-Host "=== archive root ==="; Get-ChildItem -Path $dir | Select-Object Name
-          if (-not (Test-Path (Join-Path $dir 'platforms/qwindows.dll'))) { throw "qwindows.dll not bundled" }
-          if (-not (Get-ChildItem -Path $dir -Recurse -Directory -Filter Controls -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'QtQuick' })) { throw "QtQuick.Controls qml not bundled" }
+          # windeployqt lands plugins under plugins/ and qml under qml/, not next to
+          # the exe - so search the whole tree rather than assume a flat layout.
+          if (-not (Get-ChildItem -Path $out -Recurse -Filter qwindows.dll -ErrorAction SilentlyContinue)) { throw "qwindows.dll not bundled" }
+          if (-not (Get-ChildItem -Path $out -Recurse -Directory -Filter Controls -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'QtQuick' })) { throw "QtQuick.Controls qml not bundled" }
+          # scrub Qt from PATH - the exe sits with its dlls in bin/, so a clean run
+          # proves the archive is self-contained, not borrowing the runner's qt.
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
           & $exe.FullName --version
           if ($LASTEXITCODE -ne 0) { throw "calc-gui --version exit $LASTEXITCODE (missing bundled dll?)" }

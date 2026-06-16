@@ -72,11 +72,13 @@ if(APPLE OR WIN32)
       MACOSX_BUNDLE_SHORT_VERSION_STRING "${CALC_VERSION}")
   endif()
 
-  # the .app at the dmg root on mac; the bare exe at the zip root on win so its
-  # Qt6*.dll sit beside it.
+  # mac: the .app at the dmg root (macdeployqt puts the frameworks inside it).
+  # win: the exe into bin/ so it sits with its Qt6*.dll - windeployqt deploys
+  # those to CMAKE_INSTALL_BINDIR, so the exe has to live there too or it cant
+  # find them at launch.
   install(TARGETS calc-gui
     BUNDLE  DESTINATION .
-    RUNTIME DESTINATION .)
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   # bundle Qt + the runtime QML modules (QtQuick / Controls / Layouts) the app
   # imports. our qml is compiled into the exe via qmlcachegen, so a plain
