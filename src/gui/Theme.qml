@@ -18,10 +18,12 @@ QtObject {
     readonly property color subtext0: "#a6adc8"
     readonly property color overlay1: "#7f849c"
 
-    // accents. mauve is the action colour (operators + the = key), red flags a
-    // clear or an error, peach the backspace.
+    // accents. mauve is the action colour (operators + the = key), blue the
+    // scientific functions + constants, red flags a clear or an error, peach the
+    // backspace.
     readonly property color mauve:    "#cba6f7"
     readonly property color lavender: "#b4befe"
+    readonly property color blue:     "#89b4fa"
     readonly property color red:      "#f38ba8"
     readonly property color peach:    "#fab387"
 }
