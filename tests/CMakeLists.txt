@@ -132,6 +132,13 @@ if(BASH_EXECUTABLE)
     "printf '2 + 2\\n:stats\\n:quit\\n' | $<TARGET_FILE:calc>")
   set_tests_properties(cli_stats PROPERTIES PASS_REGULAR_EXPRESSION "1 ok")
 
+  # an embedded NUL in a piped repl line must be rejected, not silently dropped
+  # so the bytes around it merge into a different number (2+2<NUL>2+3 would
+  # become 2+22+3 = 27). the line errors on stderr, so stdout (results only) must
+  # not be 27.
+  add_test(NAME cli_nul_byte_rejected COMMAND ${BASH_EXECUTABLE} -c
+    "[ \"$(printf '2+2\\0002+3\\n:quit\\n' | $<TARGET_FILE:calc> 2>/dev/null | tr -d '\\r\\n')\" != '27' ]")
+
   # a long session must not grow :history without bound. feed more lines than the
   # cap (kMaxHistory = 1000 in main.cpp), then :history, and count the numbered
   # entries it prints: capped it's exactly 1000, unbounded it would be 1051. the

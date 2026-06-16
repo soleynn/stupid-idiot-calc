@@ -359,6 +359,27 @@ const ReplCommand *find_command(const std::string &name) {
   return nullptr;
 }
 
+// read one repl line into `line`, returning false at end of input. an
+// interactive terminal goes through isocline (editing, history, completion);
+// piped input uses plain getline. the distinction matters for correctness, not
+// just chrome: getline preserves an embedded NUL, while isocline's editor
+// silently swallows it and joins the bytes around it into one different
+// expression (2+2<NUL>2+3 would become 2+22+3 = 27). with the NUL kept, the
+// engine rejects the line as an unexpected character instead of computing a
+// silently-wrong answer.
+bool read_repl_line(bool interactive, std::string &line) {
+  if (interactive) {
+    char *raw = ic_readline(""); // the marker supplies the "> " prompt
+    if (raw == nullptr) {        // ctrl-d / ctrl-c
+      return false;
+    }
+    line.assign(raw);
+    ic_free(raw); // isocline owns the buffer; always hand it back
+    return true;
+  }
+  return static_cast<bool>(std::getline(std::cin, line));
+}
+
 // the interactive loop. keeps one Environment alive so ans/memory/let carry
 // from line to line, and never exits on a user error. --trace sets the starting
 // state; :trace flips it.
@@ -372,10 +393,12 @@ int run_repl(bool trace) {
   // color is gated per-stream so piped/redirected output stays plain.
   const bool color_out = stream_is_tty(stdout);
   const bool color_err = stream_is_tty(stderr);
+  const bool interactive = stream_is_tty(stdin);
 
   // line editor: arrow-key history kept in memory only (NULL = no dotfile),
   // default 200-entry cap; the "> " prompt comes from the marker; tab completes
-  // commands/functions/constants. all of this is a no-op when stdin is piped.
+  // commands/functions/constants. all of this drives the interactive read only;
+  // piped input goes through getline instead (see read_repl_line).
   ic_set_history(nullptr, -1);
   ic_set_prompt_marker("> ", nullptr);
   ic_set_default_completer(&repl_completer, nullptr);
@@ -386,15 +409,14 @@ int run_repl(bool trace) {
   std::cerr << "stupid idiot calc. :help for help, :quit to leave.\n";
 
   while (!quit) {
-    char *raw = ic_readline(""); // the marker supplies the "> " prompt
-    if (raw == nullptr) {        // ctrl-d / ctrl-c / end of piped input
+    std::string line;
+    if (!read_repl_line(interactive, line)) { // ctrl-d / end of piped input
       if (color_out) {
         std::cout << "\n"; // tidy the cursor line, but only in a terminal
       }
       break;
     }
-    const std::string trimmed = trim(raw);
-    ic_free(raw); // isocline owns the buffer; always hand it back
+    const std::string trimmed = trim(line);
 
     if (trimmed.empty()) {
       continue;
