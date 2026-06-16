@@ -14,6 +14,10 @@ Button {
     property string role: "digit"
     readonly property bool filled: role === "equals"
 
+    // reachable by Tab (keeps the lavender ring) but a mouse click no longer
+    // yanks keyboard focus off the key-catcher, so typing keeps working.
+    focusPolicy: Qt.TabFocus
+
     Layout.fillWidth: true
     Layout.fillHeight: true
     // a low floor so the keypad can shrink its keys when the scientific panel

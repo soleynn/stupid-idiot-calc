@@ -25,22 +25,129 @@ ApplicationWindow {
     // phone cant grow, so neither does this).
     readonly property int sciPanelHeight: 130
 
+    // up/down recall through engine.inputs (newest-first raw expressions).
+    // -1 = live editing ur own draft; 0..n-1 = showing inputs[recallIndex].
+    property int recallIndex: -1
+    // the draft we stashed when recall started, so Down past the newest entry
+    // can put it back. only meaningful while recallIndex !== -1.
+    property string liveDraft: ""
+
     Engine { id: engine }
 
-    function tap(t) { window.expression += t }
-    function toggleSci() { window.sciOpen = !window.sciOpen }
+    // any edit to the draft (tap/backspace/clear) and equals() leaves recall and
+    // goes back to live. the arrow handlers call recallOlder/Newer directly so
+    // they skip this and keep walking the list.
+    function resetRecall() { window.recallIndex = -1 }
+
+    function tap(t) {
+        window.resetRecall()
+        window.expression += t
+        keyCatcher.forceActiveFocus()
+    }
+    function toggleSci() {
+        window.sciOpen = !window.sciOpen
+        keyCatcher.forceActiveFocus()
+    }
     function clearAll() {
+        window.resetRecall()
         window.expression = ""
         result.text = "0"
+        keyCatcher.forceActiveFocus()
     }
     function backspace() {
+        window.resetRecall()
         window.expression = window.expression.slice(0, -1)
+        keyCatcher.forceActiveFocus()
     }
     function equals() {
+        window.resetRecall()
+        keyCatcher.forceActiveFocus()
         if (window.expression.length === 0)
             return
         result.text = engine.evaluate(window.expression)
     }
+
+    // arrowUp: step to an older entry. clamps at the oldest, no wrap.
+    function recallOlder() {
+        var inputs = engine.inputs
+        if (inputs.length === 0)
+            return
+        if (window.recallIndex === -1) {
+            window.liveDraft = window.expression
+            window.recallIndex = 0
+            window.expression = inputs[0]
+            return
+        }
+        if (window.recallIndex < inputs.length - 1) {
+            window.recallIndex += 1
+            window.expression = inputs[window.recallIndex]
+        }
+    }
+
+    // arrowDown: step toward newer, or off the newest back to the live draft.
+    function recallNewer() {
+        if (window.recallIndex === -1)
+            return
+        if (window.recallIndex > 0) {
+            window.recallIndex -= 1
+            window.expression = engine.inputs[window.recallIndex]
+            return
+        }
+        window.recallIndex = -1
+        window.expression = window.liveDraft
+    }
+
+    // resting keyboard-focus owner. catches the physical keyboard for the whole
+    // window so u can just start typing on launch, no click first. it draws
+    // nothing and has no MouseArea, so taps on the keys below fall straight
+    // through - the on-screen keys keep working untouched, this is only hardware
+    // keyboard. printable chars reuse tap() so '/' here == the ÷ button.
+    Item {
+        id: keyCatcher
+        anchors.fill: parent
+        focus: true
+        Keys.onPressed: function (event) {
+            // ignore ctrl/alt/meta combos (window/system shortcuts); shift is
+            // fine, its how +, *, ( etc. are typed.
+            if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
+                return
+            switch (event.key) {
+            case Qt.Key_Return:
+            case Qt.Key_Enter:
+                // enter is the one evaluate key; held-down repeats dont re-eval.
+                if (!event.isAutoRepeat)
+                    window.equals()
+                event.accepted = true; return
+            case Qt.Key_Backspace:
+                window.backspace(); event.accepted = true; return
+            case Qt.Key_Delete:
+            case Qt.Key_Escape:
+                window.clearAll(); event.accepted = true; return
+            case Qt.Key_Up:
+                window.recallOlder(); event.accepted = true; return
+            case Qt.Key_Down:
+                window.recallNewer(); event.accepted = true; return
+            }
+            // printable input: digits, . ( ) + - * / ^ % =, letters (sin pi ans
+            // let ...) and space all go through tap() as-is. enter evaluates, so
+            // '=' just types - which is what lets u write `let x = 5`. note '+'
+            // is shift+= on most layouts, so it has to come through here too, not
+            // as a Key_Equal case.
+            var t = event.text
+            if (t.length === 1
+                && ("0123456789.()+-*/^%= ".indexOf(t) !== -1
+                    || /^[a-zA-Z]$/.test(t))) {
+                window.tap(t)
+                event.accepted = true
+                return
+            }
+            // anything else (Tab, shortcuts) left unaccepted so it propagates -
+            // Tab still walks the keys + shows the ring.
+        }
+    }
+
+    // belt-and-suspenders over focus: true, so typing works with no first click.
+    Component.onCompleted: keyCatcher.forceActiveFocus()
 
     ColumnLayout {
         anchors.fill: parent

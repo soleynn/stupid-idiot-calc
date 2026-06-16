@@ -18,9 +18,15 @@ QString Engine::evaluate(const QString &expression) {
 
   history_.prepend(expression + QStringLiteral("  =  ") + line);
   emit historyChanged();
+  // raw expression too, even if it errored - recall lets u up-arrow to a bad
+  // line and fix it. stays index-aligned with history_.
+  inputs_.prepend(expression);
+  emit inputsChanged();
   return line;
 }
 
 QStringList Engine::history() const { return history_; }
+
+QStringList Engine::inputs() const { return inputs_; }
 
 } // namespace calc::gui
