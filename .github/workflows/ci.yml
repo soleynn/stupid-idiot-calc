@@ -44,6 +44,32 @@ jobs:
       - name: test
         run: ctest --preset sanitize
 
+  # advisory: build + test under clang with libc++. the float overload of
+  # std::from_chars only reached libc++ in llvm 20, so the lexer leans on
+  # fast_float to parse numbers here instead; this leg is the guard that the
+  # engine still compiles and the goldens still pass on that stdlib.
+  libcxx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja + clang + libc++
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang libc++-dev libc++abi-dev
+
+      - name: configure (clang, libc++)
+        run: |
+          cmake -S . -B build/libcxx -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_FLAGS=-stdlib=libc++ \
+            -DCMAKE_EXE_LINKER_FLAGS=-stdlib=libc++
+
+      - name: build
+        run: cmake --build build/libcxx
+
+      - name: test
+        run: ctest --test-dir build/libcxx --output-on-failure --no-tests=error
+
   lint:
     runs-on: ubuntu-latest
     steps:

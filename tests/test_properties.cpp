@@ -97,7 +97,10 @@ bool ref_eval(const Node &n, double &out) {
 // draw a random depth-bounded expression tree. called from inside a property,
 // so it can use operator* to draw choices imperatively.
 Node gen_tree(int depth) {
-  if (depth <= 0 || *rc::gen::element(true, false, false)) {
+  // 1-in-3 chance of a leaf. drawn with inRange, not element(true, false,
+  // false) - element builds a vector<bool>, whose proxy refs dont compile
+  // under libc++.
+  if (depth <= 0 || *rc::gen::inRange(0, 3) == 0) {
     return leaf_node(*rc::gen::inRange<long>(1, 101)); // 1..100, never zero
   }
   const char op = *rc::gen::element('+', '-', '*', '/');

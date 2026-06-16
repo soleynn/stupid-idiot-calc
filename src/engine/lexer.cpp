@@ -1,8 +1,9 @@
 #include "calc/lexer.hpp"
 
-#include <charconv>
 #include <string>
 #include <system_error>
+
+#include <fast_float/fast_float.h>
 
 namespace calc {
 
@@ -84,11 +85,12 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
     }
 
     if (is_digit(c) || c == '.') {
-      // read the whole number with from_chars (locale independent, no throw).
+      // read the whole number with fast_float (locale independent, no throw).
       const char *first = input.data() + i;
       const char *last = input.data() + n;
       Number value = 0.0;
-      const std::from_chars_result fc = std::from_chars(first, last, value);
+      const fast_float::from_chars_result fc =
+          fast_float::from_chars(first, last, value);
       if (fc.ec == std::errc::result_out_of_range) {
         // a valid number, just too big/small for a double. point the span at
         // the whole literal, not a single char.
