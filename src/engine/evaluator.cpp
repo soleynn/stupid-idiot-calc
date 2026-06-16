@@ -167,6 +167,12 @@ Result<Number> apply_binary(BinaryOpKind op, Number a, Number c) {
     }
     return checked(std::fmod(a, c));
   case BinaryOpKind::Power:
+    if (a == 0.0 && c < 0.0) {
+      // 0 to a negative power is 1/0^|c|: a pole, not an overflow. report it
+      // the same way 1/0 does, instead of std::pow's silent +inf -> "too
+      // large".
+      return CalcError{ErrorKind::DivideByZero, "cant divide by zero"};
+    }
     if (a < 0.0 && std::floor(c) != c) {
       return CalcError{ErrorKind::DomainError,
                        "cant raise a negative number to a fractional power"};
