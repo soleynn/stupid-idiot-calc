@@ -44,6 +44,14 @@
         "CALC_BUILD_GUI": "ON",
         "CALC_BUILD_TESTS": "OFF"
       }
+    },
+    {
+      "name": "gui-release",
+      "inherits": "release",
+      "cacheVariables": {
+        "CALC_BUILD_GUI": "ON",
+        "CALC_BUILD_TESTS": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -52,7 +60,8 @@
     { "name": "sanitize", "configurePreset": "sanitize" },
     { "name": "ci", "configurePreset": "ci" },
     { "name": "coverage", "configurePreset": "coverage" },
-    { "name": "gui", "configurePreset": "gui" }
+    { "name": "gui", "configurePreset": "gui" },
+    { "name": "gui-release", "configurePreset": "gui-release" }
   ],
   "testPresets": [
     {
