@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <limits>
 
 #include "calc/output_formatter.hpp"
@@ -17,7 +18,7 @@ TEST_CASE("format_number output is pinned") {
   const Case cases[] = {
       {42.0, "42"},
       {0.0, "0"},
-      {-0.0, "-0"},
+      {-0.0, "0"}, // a negative zero folds to a plain "0", not "-0"
       {-42.0, "-42"},
       {2.0, "2"},
       {7.0, "7"},
@@ -54,4 +55,13 @@ TEST_CASE("format_number output is pinned") {
     CAPTURE(c.text);
     REQUIRE(format_number(c.value) == c.text);
   }
+}
+
+TEST_CASE("a negative zero from arithmetic formats as a plain 0") {
+  // the kinds of ops that land on -0.0 (a zero times/divided by a negative, a
+  // ceil that rounds up to zero) must all read "0", never "-0".
+  REQUIRE(format_number(std::copysign(0.0, -1.0)) == "0");
+  REQUIRE(format_number(-1.0 * 0.0) == "0");
+  REQUIRE(format_number(0.0 / -1.0) == "0");
+  REQUIRE(format_number(std::ceil(-0.9)) == "0");
 }

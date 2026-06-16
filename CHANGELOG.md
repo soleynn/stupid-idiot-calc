@@ -50,6 +50,8 @@ versioning](https://semver.org/).
   `:history` log and the gui's history/recall lists are each capped at the last
   1000 entries, so the oldest fall off instead of piling up one per evaluate for
   the life of the session.
+- a result that lands on negative zero (`0 * -1`, `0 / -1`, `-5 * 0`,
+  `ceil(-0.9)`, ...) now prints a plain `0` instead of `-0`.
 
 ## [0.1.0] - 2026-06-16
 
