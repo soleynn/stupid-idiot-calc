@@ -44,10 +44,10 @@ target_include_directories(isocline_lib SYSTEM PUBLIC
   ${isocline_SOURCE_DIR}/include)
 
 # thin front-end: read a line, hand it to the engine, print the result. this is
-# the only part that touches stdin/stdout. the version comes from project() so
-# theres one source of truth (the release PR will move it into a version.hpp).
+# the only part that touches stdin/stdout. the version string is CALC_VERSION,
+# which defaults to project(VERSION) but a release build overrides it from the tag.
 # fmt is here for the leveled logger's spdlog-shaped macros.
 add_executable(calc main.cpp crash_handler.cpp)
-target_compile_definitions(calc PRIVATE CALC_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(calc PRIVATE CALC_VERSION="${CALC_VERSION}")
 target_link_libraries(calc PRIVATE calc_core calc_warnings calc_strict
                                    cxxopts::cxxopts fmt::fmt isocline_lib)

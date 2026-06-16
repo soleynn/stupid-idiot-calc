@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
 project(stupid_idiot_calc VERSION 0.1.0 LANGUAGES CXX)
 
+# the version string baked into `--version`. defaults to the project version, but
+# a release build overrides it (`-DCALC_VERSION=...`) so the published binaries
+# report the git tag they were cut from instead of the hardcoded 0.1.0.
+set(CALC_VERSION "${PROJECT_VERSION}" CACHE STRING "version string baked into --version")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
