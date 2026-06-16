@@ -65,6 +65,18 @@ TEST_CASE("an overflowing power is caught, not returned as inf") {
   REQUIRE(error_kind_of("10 ^ 400") == ErrorKind::Overflow);
 }
 
+TEST_CASE("zero to a negative power is divide-by-zero, not overflow") {
+  // 0^-n is 1/0^n: a pole, so it reports the same divide-by-zero 1/0 does,
+  // not std::pow's silent +inf turning into an overflow.
+  REQUIRE(error_kind_of("0 ^ -1") == ErrorKind::DivideByZero);
+  REQUIRE(error_kind_of("(0 - 0) ^ -1") == ErrorKind::DivideByZero);
+  REQUIRE(error_kind_of("0 ^ -2") == ErrorKind::DivideByZero);
+  REQUIRE(error_kind_of("0 ^ -0.5") == ErrorKind::DivideByZero);
+  // a zero or positive exponent is unaffected.
+  REQUIRE(value_of("0 ^ 0") == 1.0);
+  REQUIRE(value_of("0 ^ 3") == 0.0);
+}
+
 TEST_CASE("evaluate handles the modulo operator") {
   REQUIRE(value_of("10 % 3") == 1.0);
   REQUIRE(value_of("5.5 % 2") == 1.5); // a real remainder, not integer-only

@@ -52,6 +52,9 @@ versioning](https://semver.org/).
   the life of the session.
 - a result that lands on negative zero (`0 * -1`, `0 / -1`, `-5 * 0`,
   `ceil(-0.9)`, ...) now prints a plain `0` instead of `-0`.
+- `0` to a negative power (`0^-1`, `0^-2`, `0^-0.5`) now reports "cant divide by
+  zero" — its a pole, same as `1/0` — instead of the misleading "result is too
+  large".
 
 ## [0.1.0] - 2026-06-16
 
