@@ -19,8 +19,12 @@ std::string format_number(Number value) {
   if (value == 0.0) {
     value = 0.0;
   }
-  // {:.12g} reproduces the old ostream precision(12) output byte for byte.
-  return fmt::format("{:.12g}", value);
+  // the shortest decimal that round-trips: format_number(x) re-parses to
+  // exactly x. fmt's default float format (dragonbox) picks the fewest digits
+  // that still pin the value, so 0.5 stays "0.5" but 0.1 + 0.2 shows its true
+  // "0.30000000000000004" rather than a rounded "0.3" that re-parses to a
+  // different double.
+  return fmt::format("{}", value);
 }
 
 std::string format_result(const Result<Number> &result) {

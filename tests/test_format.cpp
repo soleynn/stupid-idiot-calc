@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
+#include <cstdlib>
 #include <limits>
+#include <string>
 
 #include "calc/output_formatter.hpp"
 
@@ -30,20 +32,20 @@ TEST_CASE("format_number output is pinned") {
       {-1.5, "-1.5"},
       {0.1, "0.1"},
       {0.0001, "0.0001"},
-      {1.0 / 3.0, "0.333333333333"},
-      {2.0 / 3.0, "0.666666666667"},
+      {1.0 / 3.0, "0.3333333333333333"},
+      {2.0 / 3.0, "0.6666666666666666"},
       {12345.6789, "12345.6789"},
-      {0.123456789012345, "0.123456789012"},
-      {0.000123456789012345, "0.000123456789012"},
+      {0.123456789012345, "0.123456789012345"},
+      {0.000123456789012345, "0.000123456789012345"},
       {123456789012.0, "123456789012"},
       {1e11, "100000000000"},
-      {1e12, "1e+12"},
-      {1e15, "1e+15"},
+      {1e12, "1000000000000"},
+      {1e15, "1000000000000000"},
       {1e20, "1e+20"},
       {1e-5, "1e-05"},
       {1e-20, "1e-20"},
-      {1234567890123.0, "1.23456789012e+12"},
-      {9999999999999.0, "1e+13"},
+      {1234567890123.0, "1234567890123"},
+      {9999999999999.0, "9999999999999"},
       {1e100, "1e+100"},
       {1e-100, "1e-100"},
       {1e308, "1e+308"},
@@ -54,6 +56,37 @@ TEST_CASE("format_number output is pinned") {
   for (const Case &c : cases) {
     CAPTURE(c.text);
     REQUIRE(format_number(c.value) == c.text);
+  }
+}
+
+TEST_CASE("format_number output re-parses to the same double") {
+  // the contract: what's shown is the shortest decimal that reads back as the
+  // exact same value. these are the cases 12 significant figures used to round
+  // off (so "0.3" came back a different double than 0.1 + 0.2 produced).
+  const double values[] = {
+      0.1 + 0.2,
+      1.0 / 3.0,
+      2.0 / 3.0,
+      1.4142135623730951, // sqrt(2)
+      3.141592653589793,  // pi
+      0.1,
+      0.3,
+      1.1,
+      12345.6789,
+      9999999999999.0,
+      123456789012.0,
+      1e308,
+      1e-100,
+      -1.0 / 3.0,
+      -(0.1 + 0.2),
+  };
+  for (const double v : values) {
+    CAPTURE(v);
+    const std::string shown = format_number(v);
+    // strtod is correctly-rounded and always available (unlike from_chars for
+    // floats on older libc++), so it re-parses the shown text the same way any
+    // conforming reader - including the engine's own lexer - would.
+    REQUIRE(std::strtod(shown.c_str(), nullptr) == v);
   }
 }
 
