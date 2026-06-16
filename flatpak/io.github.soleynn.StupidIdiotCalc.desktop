@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=stupid idiot calc
+Comment=a basic calculator
+Exec=calc-gui
+Icon=io.github.soleynn.StupidIdiotCalc
+Categories=Utility;Calculator;
+Terminal=false

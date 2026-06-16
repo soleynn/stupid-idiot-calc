@@ -1,0 +1,29 @@
+id: io.github.soleynn.StupidIdiotCalc
+runtime: org.kde.Platform
+runtime-version: '6.10'
+sdk: org.kde.Sdk
+command: calc-gui
+
+# the gui only needs a screen + gpu; no network, no filesystem, no anything else.
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=ipc
+
+modules:
+  - name: stupid-idiot-calc
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCALC_BUILD_GUI=ON
+      - -DCALC_BUILD_TESTS=OFF
+    # the engine + cli deps (fmt, fast_float, cxxopts, isocline) are fetched at
+    # configure time, so the build step needs network. fine for a self-built
+    # sideloaded bundle - flathub would instead want each pinned as its own source.
+    build-options:
+      build-args:
+        - --share=network
+    sources:
+      - type: dir
+        path: ..

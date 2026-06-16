@@ -1,3 +1,6 @@
+#include <cstdio>
+#include <string_view>
+
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QString>
@@ -8,6 +11,16 @@
 // terminal: spin up Qt, load the qml, run the event loop. all the calculator
 // lives in calc_core (linked unchanged) and the one Engine bridge.
 int main(int argc, char *argv[]) {
+  // --version prints and exits before any Qt, so it works with no display (e.g.
+  // `flatpak run ... --version` in a terminal). CALC_VERSION is stamped at
+  // build time - the project version, or the release tag a build was cut from.
+  for (int i = 1; i < argc; ++i) {
+    if (std::string_view(argv[i]) == "--version") {
+      std::printf("stupid idiot calc %s\n", CALC_VERSION);
+      return 0;
+    }
+  }
+
   QGuiApplication app(argc, argv);
 
   // a headless wiring check for ci: build the bridge, evaluate a known
