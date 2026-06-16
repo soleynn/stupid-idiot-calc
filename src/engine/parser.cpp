@@ -21,12 +21,11 @@ namespace {
 // count too. both come back as a CalcError, not a crash. neither limit is
 // reachable by a human typing at the repl.
 //
-// note: a near-cap flat tree is ~kMaxTokens/2 deep, and that depth is walked
-// recursively twice - once by eval() (which has no separate guard of its own)
-// and once by ~Expr when the tree is freed - so the stack budget scales with
-// kMaxTokens. its comfortable on the usual 8mb main-thread stack (where the
-// engine runs today); a front-end that ever drives the engine from a
-// small-stack worker should size that stack to match, or drop this cap.
+// note: a near-cap flat tree is ~kMaxTokens/2 deep. the evaluator, the --trace
+// tree render, and ~Expr all walk that depth iteratively now (explicit
+// work-stacks - see evaluator.cpp and ast.cpp), so the depth no longer charges
+// the native stack one frame per node. that keeps it within the small stacks
+// android/qt worker threads run on, not just the 8mb main-thread stack.
 constexpr int kMaxDepth = 256;
 constexpr std::size_t kMaxTokens = 4096;
 
