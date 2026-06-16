@@ -1,5 +1,6 @@
 #include "calc/lexer.hpp"
 
+#include <cmath>
 #include <string>
 #include <system_error>
 
@@ -103,18 +104,21 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
       const fast_float::from_chars_result fc =
           fast_float::from_chars(first, last, value);
       if (fc.ec == std::errc::result_out_of_range) {
-        // a valid number, just too big/small for a double. point the span at
-        // the whole literal, not a single char.
-        const auto len = static_cast<std::size_t>(fc.ptr - first);
-        return CalcError{ErrorKind::Overflow, "number is out of range",
-                         SourceSpan{i, len}};
-      }
-      if (fc.ec != std::errc()) {
+        // fast_float flags both directions as out-of-range. an overflow comes
+        // back as +/-inf and is a real error; an underflow (a literal too small
+        // for a double, like 1e-400) comes back as 0, which is a perfectly good
+        // answer - keep it instead of rejecting it. span the whole literal.
+        if (std::isinf(value)) {
+          const auto len = static_cast<std::size_t>(fc.ptr - first);
+          return CalcError{ErrorKind::Overflow, "number is out of range",
+                           SourceSpan{i, len}};
+        }
+      } else if (fc.ec != std::errc()) {
         return CalcError{ErrorKind::UnexpectedChar, "could not read a number",
                          SourceSpan{i, 1}};
       }
       tok.type = TokenType::Num;
-      tok.value = value;
+      tok.value = value; // the parsed number, or 0 on an underflow
       tokens.push_back(tok);
       i += static_cast<std::size_t>(fc.ptr - first);
       continue;

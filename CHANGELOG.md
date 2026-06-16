@@ -55,6 +55,9 @@ versioning](https://semver.org/).
 - `0` to a negative power (`0^-1`, `0^-2`, `0^-0.5`) now reports "cant divide by
   zero" — its a pole, same as `1/0` — instead of the misleading "result is too
   large".
+- a number literal too small for a double (`1e-400`, `1e-500`) now reads as `0`
+  instead of being rejected as "number is out of range" — that message is kept
+  for a real overflow like `1e400`, which is a different thing.
 
 ## [0.1.0] - 2026-06-16
 
