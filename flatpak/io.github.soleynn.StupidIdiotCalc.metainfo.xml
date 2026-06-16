@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.soleynn.StupidIdiotCalc</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>stupid idiot calc</name>
+  <summary>A basic calculator</summary>
+  <description>
+    <p>
+      A small calculator with a Qt Quick interface. Type or tap an expression
+      and it evaluates it, with operator precedence, parentheses, exponents and
+      a running history.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.soleynn.StupidIdiotCalc.desktop</launchable>
+  <url type="homepage">https://github.com/soleynn/stupid-idiot-calc</url>
+  <url type="bugtracker">https://github.com/soleynn/stupid-idiot-calc/issues</url>
+  <developer id="io.github.soleynn">
+    <name>soleynn</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-06-16" />
+  </releases>
+</component>

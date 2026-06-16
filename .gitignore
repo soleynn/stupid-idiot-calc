@@ -21,6 +21,10 @@ cmake_install.cmake
 CMakeUserPresets.json
 compile_commands.json
 
+# flatpak build output
+.flatpak-builder/
+*.flatpak
+
 # editor / os junk
 .vscode/
 .idea/
