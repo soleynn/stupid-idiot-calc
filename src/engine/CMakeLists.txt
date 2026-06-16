@@ -29,6 +29,7 @@ set_target_properties(fast_float PROPERTIES
 # the calculator engine. pure logic, knows nothing about stdin/stdout. the cli
 # and the tests both link this.
 add_library(calc_core STATIC
+  ast.cpp
   lexer.cpp
   parser.cpp
   evaluator.cpp

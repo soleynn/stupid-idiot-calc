@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
 #include <string_view>
 
 #include "calc/environment.hpp"
@@ -172,4 +173,17 @@ TEST_CASE("evaluate does not crash on garbage") {
 
 TEST_CASE("evaluate passes a parse error straight through") {
   REQUIRE(error_kind_of("2 + * 3") == ErrorKind::UnexpectedToken);
+}
+
+TEST_CASE("a flat expression right at the token cap still evaluates") {
+  // "1+1+...+1" with 2048 ones is exactly kMaxTokens (4096) tokens: the largest
+  // flat input the parser accepts. it builds a ~2047-deep tree, so this pins
+  // that the iterative walk and teardown land on 2048 instead of overflowing.
+  // the small-stack proof (where the old recursion actually segfaulted) is the
+  // standalone stress_small_stack test.
+  std::string input = "1";
+  for (int i = 0; i < 2047; ++i) {
+    input += "+1";
+  }
+  REQUIRE(value_of(input) == 2048.0);
 }

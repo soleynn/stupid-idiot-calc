@@ -38,11 +38,6 @@ Result<Number> checked(Number value) {
   return value;
 }
 
-// the walk recurses and needs the env to resolve names (ans, memory, user
-// variables), so it rides along by const ref the whole way down. the tracer is
-// null on the normal path and only non-null under --trace / :trace.
-Result<Number> eval(const Expr &expr, const Environment &env, Tracer *tracer);
-
 // the built-in constants. resolved right here, not in the (still empty)
 // Environment; user-defined names come later and will layer on top.
 constexpr Number kPi = 3.14159265358979323846;
@@ -182,11 +177,15 @@ Result<Number> apply_binary(BinaryOpKind op, Number a, Number c) {
   return CalcError{ErrorKind::NotImplemented, "unknown operator"};
 }
 
-// one operator() per node kind; std::visit dispatches on the live variant. the
-// env is read-only here: name resolution reads it, but binding/memory writes
-// happen up at the statement level in evaluate(). when tracer is non-null, each
-// node that computes a value emits one post-order line showing the work.
-struct EvalVisitor {
+// the tree-walk evaluator. it runs off an explicit work-stack instead of
+// recursing: a long flat expression (1+1+1+...) builds a tree thousands of
+// nodes deep, and a recursive walk would overflow the small thread stacks
+// android/qt worker threads run on. the output it produces - including the
+// post-order --trace step lines and stop-at-the-first-error behavior - matches
+// a plain post-order recursion exactly. the env is read-only here: name
+// resolution reads it, but binding/memory writes happen up at the statement
+// level in evaluate().
+struct Evaluator {
   const Environment &env;
   Tracer *tracer;
 
@@ -196,15 +195,16 @@ struct EvalVisitor {
     }
   }
 
-  Result<Number> operator()(const NumberLiteral &n) const {
+  // a leaf: a literal value, which never fails.
+  Number literal(const NumberLiteral &n) const {
     step(format_number(n.value));
     return n.value;
   }
 
-  Result<Number> operator()(const Variable &v) const {
-    // built-in names (ans, the memory register, pi/e) resolve
-    // case-insensitively to match is_reserved; user `let` names keep the exact
-    // case they were bound with.
+  // a leaf: resolve a name. built-in names (ans, the memory register, pi/e)
+  // resolve case-insensitively to match is_reserved; user `let` names keep the
+  // exact case they were bound with.
+  Result<Number> variable(const Variable &v) const {
     const std::string lower = to_lower(v.name);
     Number value = 0.0;
     bool found = false;
@@ -229,61 +229,103 @@ struct EvalVisitor {
     return value;
   }
 
-  Result<Number> operator()(const UnaryOp &u) const {
-    Result<Number> operand = eval(*u.operand, env, tracer);
-    if (!operand) {
-      return operand.error();
+  // walk the tree to a value. each frame tracks how many of its children have
+  // been launched; a node is only reduced once its children have all produced
+  // values, which keeps the step lines in post-order. the first error returns
+  // straight out, leaving the rest of the tree unwalked - same short-circuit a
+  // recursive walk gives.
+  Result<Number> run(const Expr &root) const {
+    struct Frame {
+      const Expr *expr;
+      int stage;  // children launched so far (0 = none yet)
+      Number lhs; // a binary op parks its left value here across the right
+    };
+
+    std::vector<Frame> stack;
+    stack.push_back({&root, 0, 0.0});
+    Number value = 0.0; // the value the just-finished child handed back
+
+    while (!stack.empty()) {
+      Frame &f = stack.back();
+      const Expr &e = *f.expr;
+
+      if (const auto *n = std::get_if<NumberLiteral>(&e.node)) {
+        value = literal(*n);
+        stack.pop_back();
+      } else if (const auto *v = std::get_if<Variable>(&e.node)) {
+        Result<Number> resolved = variable(*v);
+        if (!resolved) {
+          return resolved.error();
+        }
+        value = resolved.value();
+        stack.pop_back();
+      } else if (const auto *u = std::get_if<UnaryOp>(&e.node)) {
+        if (f.stage == 0) {
+          f.stage = 1;
+          stack.push_back({u->operand.get(), 0, 0.0});
+        } else {
+          const Number out = -value; // negate cant overflow
+          step("-(" + format_number(value) + ") = " + format_number(out));
+          value = out;
+          stack.pop_back();
+        }
+      } else if (const auto *b = std::get_if<BinaryOp>(&e.node)) {
+        if (f.stage == 0) {
+          f.stage = 1;
+          stack.push_back({b->lhs.get(), 0, 0.0});
+        } else if (f.stage == 1) {
+          f.lhs = value; // left is done; park it and go do the right
+          f.stage = 2;
+          stack.push_back({b->rhs.get(), 0, 0.0});
+        } else {
+          const Number a = f.lhs;
+          const Number c = value;
+          Result<Number> out = apply_binary(b->op, a, c);
+          if (!out) {
+            return out.error();
+          }
+          step(format_number(a) + " " + op_symbol(b->op) + " " +
+               format_number(c) + " = " + format_number(out.value()));
+          value = out.value();
+          stack.pop_back();
+        }
+      } else {
+        const auto &call = std::get<FunctionCall>(e.node);
+        if (f.stage == 0) {
+          // the name and arg count are checked before the argument is walked,
+          // so a bad call short-circuits without evaluating (or tracing) it.
+          const UnaryFn fn = lookup_function(to_lower(call.name));
+          if (fn == nullptr) {
+            return CalcError{ErrorKind::UnknownName,
+                             "unknown function '" + call.name + "'"};
+          }
+          if (call.args.size() != 1) {
+            return CalcError{ErrorKind::WrongArgCount,
+                             call.name + " takes 1 argument but got " +
+                                 std::to_string(call.args.size())};
+          }
+          f.stage = 1;
+          stack.push_back({call.args[0].get(), 0, 0.0});
+        } else {
+          const UnaryFn fn = lookup_function(to_lower(call.name));
+          Result<Number> out = fn(value);
+          if (!out) {
+            return out.error();
+          }
+          step(call.name + "(" + format_number(value) +
+               ") = " + format_number(out.value()));
+          value = out.value();
+          stack.pop_back();
+        }
+      }
     }
-    const Number value = -operand.value(); // negate cant overflow
-    step("-(" + format_number(operand.value()) + ") = " + format_number(value));
+
     return value;
-  }
-
-  Result<Number> operator()(const BinaryOp &b) const {
-    Result<Number> lhs = eval(*b.lhs, env, tracer);
-    if (!lhs) {
-      return lhs.error();
-    }
-    Result<Number> rhs = eval(*b.rhs, env, tracer);
-    if (!rhs) {
-      return rhs.error();
-    }
-    const Number a = lhs.value();
-    const Number c = rhs.value();
-    Result<Number> out = apply_binary(b.op, a, c);
-    if (out) {
-      step(format_number(a) + " " + op_symbol(b.op) + " " + format_number(c) +
-           " = " + format_number(out.value()));
-    }
-    return out;
-  }
-
-  Result<Number> operator()(const FunctionCall &call) const {
-    const UnaryFn fn = lookup_function(to_lower(call.name));
-    if (fn == nullptr) {
-      return CalcError{ErrorKind::UnknownName,
-                       "unknown function '" + call.name + "'"};
-    }
-    if (call.args.size() != 1) {
-      return CalcError{ErrorKind::WrongArgCount,
-                       call.name + " takes 1 argument but got " +
-                           std::to_string(call.args.size())};
-    }
-    const Result<Number> arg = eval(*call.args[0], env, tracer);
-    if (!arg) {
-      return arg.error();
-    }
-    Result<Number> out = fn(arg.value());
-    if (out) {
-      step(call.name + "(" + format_number(arg.value()) +
-           ") = " + format_number(out.value()));
-    }
-    return out;
   }
 };
 
 Result<Number> eval(const Expr &expr, const Environment &env, Tracer *tracer) {
-  return std::visit(EvalVisitor{env, tracer}, expr.node);
+  return Evaluator{env, tracer}.run(expr);
 }
 
 // render the token list to the tracer (the first of the three trace sections).
@@ -333,45 +375,54 @@ void trace_tokens(Tracer &tracer, const std::vector<Token> &tokens) {
 }
 
 // render the parse tree, one node per line, children indented under their
-// parent (the second trace section).
-struct TreeRenderer {
-  std::string &out;
-  int depth;
-
-  void line(const std::string &label) const {
-    out.append(static_cast<std::size_t>(depth) * 2 + 2, ' ');
-    out += label;
-    out += '\n';
-  }
-  void recurse(const Expr &child) const {
-    std::visit(TreeRenderer{out, depth + 1}, child.node);
-  }
-
-  void operator()(const NumberLiteral &n) const {
-    line(format_number(n.value));
-  }
-  void operator()(const Variable &v) const { line(v.name); }
-  void operator()(const UnaryOp &u) const {
-    line("- (negate)");
-    recurse(*u.operand);
-  }
-  void operator()(const BinaryOp &b) const {
-    line(op_symbol(b.op));
-    recurse(*b.lhs);
-    recurse(*b.rhs);
-  }
-  void operator()(const FunctionCall &c) const {
-    line(c.args.empty() ? c.name + "()" : c.name + "(...)");
-    for (const ExprPtr &arg : c.args) {
-      recurse(*arg);
-    }
-  }
-};
-
+// parent (the second trace section). like the evaluator it walks off an
+// explicit stack so a very deep tree cant overflow the real one. the order a
+// recursive pre-order walk gives (a node, then its children left to right) is
+// kept by pushing the children in reverse, so they come back off the stack in
+// order.
 void trace_tree(Tracer &tracer, const Expr &tree) {
   tracer.write("tree:\n");
   std::string out;
-  std::visit(TreeRenderer{out, 0}, tree.node);
+
+  const auto line = [&out](int depth, const std::string &label) {
+    out.append(static_cast<std::size_t>(depth) * 2 + 2, ' ');
+    out += label;
+    out += '\n';
+  };
+
+  struct Item {
+    const Expr *expr;
+    int depth;
+  };
+  std::vector<Item> stack;
+  stack.push_back({&tree, 0});
+
+  while (!stack.empty()) {
+    const Item it = stack.back();
+    stack.pop_back();
+    const Expr &e = *it.expr;
+    const int depth = it.depth;
+
+    if (const auto *n = std::get_if<NumberLiteral>(&e.node)) {
+      line(depth, format_number(n->value));
+    } else if (const auto *v = std::get_if<Variable>(&e.node)) {
+      line(depth, v->name);
+    } else if (const auto *u = std::get_if<UnaryOp>(&e.node)) {
+      line(depth, "- (negate)");
+      stack.push_back({u->operand.get(), depth + 1});
+    } else if (const auto *b = std::get_if<BinaryOp>(&e.node)) {
+      line(depth, op_symbol(b->op));
+      stack.push_back({b->rhs.get(), depth + 1});
+      stack.push_back({b->lhs.get(), depth + 1});
+    } else {
+      const auto &call = std::get<FunctionCall>(e.node);
+      line(depth, call.args.empty() ? call.name + "()" : call.name + "(...)");
+      for (auto arg = call.args.rbegin(); arg != call.args.rend(); ++arg) {
+        stack.push_back({arg->get(), depth + 1});
+      }
+    }
+  }
+
   tracer.write(out);
 }
 

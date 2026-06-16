@@ -54,6 +54,21 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 catch_discover_tests(calc_tests)
 
+# a standalone small-stack stress test for the bounded-eval fix: it evaluates
+# the largest flat expression the parser accepts on a deliberately tiny 256kb
+# thread stack, so any slip back to per-node recursion in eval / --trace render
+# / ~Expr overflows and fails THIS exe - in its own process, so a regression is
+# one red test instead of a segfault that takes the whole suite down. linux-only
+# (it needs pthread_attr_setstacksize); the other os legs skip it and stay
+# green. it runs in the linux ctest leg, so a regression rightly fails ci.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(Threads REQUIRED)
+  add_executable(stress_small_stack stress_small_stack.cpp)
+  target_link_libraries(stress_small_stack PRIVATE calc_core calc_warnings
+                                                   Threads::Threads)
+  add_test(NAME stress_small_stack COMMAND stress_small_stack)
+endif()
+
 # a few black-box checks of the actual binary: the scriptable one-shot contract
 # (a result and nothing else on stdout), --version, --help, and the error exit
 # code. these are the only tests that run the cli end to end. line-anchored

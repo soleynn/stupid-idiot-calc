@@ -31,6 +31,16 @@ versioning](https://semver.org/).
 - the "uses Qt 6 under LGPLv3" line from the window — that notice already lives
   in the readme and `licenses/`, no need to repeat it in the ui.
 
+### fixed
+
+- a long flat expression like `1+1+1+...`, right up to the 4096-token cap, no
+  longer crashes the process on a small thread stack — the kind android and qt
+  worker threads run on. it builds a tree ~2000 nodes deep, and walking or
+  freeing that used to recurse one stack frame per node; the evaluator, the
+  `--trace` tree render and the tree teardown all do it iteratively now, so the
+  depth cant overflow the stack. desktop behaviour is unchanged and the same
+  expression still returns the same answer.
+
 ## [0.1.0] - 2026-06-16
 
 the first release: the calculation engine, a cli/repl, a desktop gui, and

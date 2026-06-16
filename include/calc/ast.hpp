@@ -70,6 +70,15 @@ struct Expr {
   Expr(UnaryOp u) : node(std::move(u)) {}
   Expr(BinaryOp b) : node(std::move(b)) {}
   Expr(FunctionCall f) : node(std::move(f)) {}
+
+  // a deep tree is freed iteratively, not by the default recursive unique_ptr
+  // chain (see ast.cpp): a long flat 1+1+1+... builds a tree thousands of nodes
+  // deep, and recursing that on teardown overflows a small thread stack. the
+  // user-declared destructor means move has to be spelled back out; copy stays
+  // gone, since the unique_ptr children were never copyable anyway.
+  ~Expr();
+  Expr(Expr &&) noexcept = default;
+  Expr &operator=(Expr &&) noexcept = default;
 };
 
 } // namespace calc
