@@ -227,16 +227,14 @@ private:
     throw ParseError{CalcError{kind, std::move(message)}};
   }
 
-  // bail out of the recursion with an error aimed at one token. operators and
-  // parens are a single char; End has no width. a multi-digit number used as an
-  // error token (only a trailing/stray one can be, like the "23" in "1 23")
-  // under-points to width 1, since Token only carries an offset and no length
-  // yet. proper width waits until it does.
+  // bail out of the recursion with an error aimed at one token. the span covers
+  // the whole token, so a multi-char one (a stray "23456789" or a trailing
+  // identifier) underlines all of it, not just its first char. End has length
+  // 0, so it points just past the input with a bare caret.
   [[noreturn]] void fail(ErrorKind kind, std::string message,
                          const Token &tok) {
-    const std::size_t length = tok.type == TokenType::End ? 0u : 1u;
-    throw ParseError{
-        CalcError{kind, std::move(message), SourceSpan{tok.offset, length}}};
+    throw ParseError{CalcError{kind, std::move(message),
+                               SourceSpan{tok.offset, tok.length}}};
   }
 
   const std::vector<Token> &tokens_;

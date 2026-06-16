@@ -263,3 +263,18 @@ TEST_CASE("parse refuses a token list longer than the cap") {
   REQUIRE(tree.error().kind == ErrorKind::TooComplex);
   REQUIRE(tree.error().message == "expression is too long");
 }
+
+TEST_CASE("a multi-character error token is spanned in full") {
+  // the offending token should be underlined whole, not just at its first char:
+  // a stray multi-digit number and a trailing identifier each span their
+  // length.
+  auto num = parse_str("1 23456789");
+  REQUIRE_FALSE(num.has_value());
+  REQUIRE(num.error().span.offset == 2u);
+  REQUIRE(num.error().span.length == 8u);
+
+  auto id = parse_str("foo bar");
+  REQUIRE_FALSE(id.has_value());
+  REQUIRE(id.error().span.offset == 4u);
+  REQUIRE(id.error().span.length == 3u);
+}

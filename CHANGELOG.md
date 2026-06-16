@@ -67,6 +67,11 @@ versioning](https://semver.org/).
   merged into a different number (`2+2`, NUL, `2+3` came out as `2+22+3` = 27).
   piped input is read with getline, which keeps the NUL so the engine can flag
   it.
+- error carets are sharper: a multi-character error token (a stray number or a
+  trailing name) is underlined in full now (`^~~~~~~~`, not a lone `^`), and the
+  column and caret count characters instead of bytes so they line up under
+  multibyte utf-8. a non-ascii character is reported as a whole glyph with a
+  valid message (`unexpected character 'é'`) rather than a single stray byte.
 
 ### changed
 
