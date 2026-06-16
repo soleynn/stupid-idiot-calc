@@ -1,0 +1,61 @@
+# changelog
+
+the notable changes to stupid idiot calc. the format follows [keep a
+changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [semantic
+versioning](https://semver.org/).
+
+## [unreleased]
+
+### added
+
+- a scientific function panel behind a `ƒ(x)` toggle above the keypad: `sin`,
+  `cos`, `tan`, `√`, `ln`, `log`, `exp`, `abs`, `floor`, `ceil` and the
+  constants `π` and `e` — all things the engine could already do but the gui
+  had no way to tap. a function key drops in `name(` so u just type the arg and
+  close the paren; `π`/`e` go in as bare names. trig is in degrees (theres a
+  `deg` marker on the toggle).
+- the panel opens and closes with a smooth animation that reflows the keypad to
+  fit instead of resizing the window — the keys just shrink to make room.
+
+### changed
+
+- reskinned the gui in catppuccin mocha: the window, a recessed display panel
+  where history/expression/result step up in brightness, and colour-coded keys
+  (mauve operators, blue functions, a filled `=`, red `C`, peach `⌫`). it reads
+  `0` at rest now.
+- pinned the Basic qt quick controls style so the gui looks identical on mac,
+  linux and windows instead of each platforms native one.
+
+### removed
+
+- the "uses Qt 6 under LGPLv3" line from the window — that notice already lives
+  in the readme and `licenses/`, no need to repeat it in the ui.
+
+## [0.1.0] - 2026-06-16
+
+the first release: the calculation engine, a cli/repl, a desktop gui, and
+installable builds for mac, linux and windows.
+
+### added
+
+- the engine — a hand-rolled lexer → recursive-descent parser → tree-walking
+  evaluator for `+ - * / % ^`, named functions (`sqrt sin cos tan abs ln log
+  exp floor ceil`) and constants (`pi`, `e`), with `ans`, memory (`m+ m- mr
+  mc`) and `let` bindings through an `Environment`. divide-by-zero and domain
+  errors come back as values, never crashes, and parse errors point at the
+  mistake with a clang-style caret. output goes through fmt.
+- a cli/repl front-end: `--version`, one-shot mode, `--trace` to show the eval
+  steps, a leveled logger, a crash handler, isocline line-editing and `:`
+  meta-commands.
+- a qt 6 quick/qml desktop gui (`calc-gui`) that drives the same engine
+  unchanged — a history list, the expression, the result and a grid of keys.
+- number parsing via fast_float, so the engine builds the same on gcc, clang
+  and msvc (and libc++ and the android ndk).
+- packaging: a mac `.dmg` and a windows `.zip` with qt bundled in, a linux
+  `.flatpak`, and a tag-triggered draft github release that ties the three
+  together. `--version` reports the release tag.
+- ci on linux, macos and windows — the `build` check gates merges, with
+  advisory sanitizer, clang-tidy, coverage, fuzz and libc++ legs alongside it.
+
+[unreleased]: https://github.com/soleynn/stupid-idiot-calc/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/soleynn/stupid-idiot-calc/releases/tag/v0.1.0
