@@ -36,6 +36,14 @@
       "name": "coverage",
       "inherits": "debug",
       "cacheVariables": { "CALC_ENABLE_COVERAGE": "ON" }
+    },
+    {
+      "name": "gui",
+      "inherits": "debug",
+      "cacheVariables": {
+        "CALC_BUILD_GUI": "ON",
+        "CALC_BUILD_TESTS": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -43,7 +51,8 @@
     { "name": "release", "configurePreset": "release" },
     { "name": "sanitize", "configurePreset": "sanitize" },
     { "name": "ci", "configurePreset": "ci" },
-    { "name": "coverage", "configurePreset": "coverage" }
+    { "name": "coverage", "configurePreset": "coverage" },
+    { "name": "gui", "configurePreset": "gui" }
   ],
   "testPresets": [
     {
