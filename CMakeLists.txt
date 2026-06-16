@@ -23,7 +23,7 @@ add_library(calc_warnings INTERFACE)
 target_compile_options(
   calc_warnings
   INTERFACE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wconversion;-Wsign-conversion>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wconversion;-Wsign-conversion>
     $<$<CXX_COMPILER_ID:MSVC>:/W4;/permissive->)
 
 # -Werror only on our own code (not the test TUs, which expand third-party
@@ -31,7 +31,7 @@ target_compile_options(
 add_library(calc_strict INTERFACE)
 if(CALC_WARNINGS_AS_ERRORS)
   target_compile_options(
-    calc_strict INTERFACE $<$<CXX_COMPILER_ID:GNU,Clang>:-Werror>
+    calc_strict INTERFACE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Werror>
                           $<$<CXX_COMPILER_ID:MSVC>:/WX>)
 endif()
 
