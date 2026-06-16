@@ -68,6 +68,15 @@ versioning](https://semver.org/).
   piped input is read with getline, which keeps the NUL so the engine can flag
   it.
 
+### changed
+
+- numbers display at shortest round-trip precision now, so the shown value reads
+  back as the exact same double. clean results stay short (`0.5`, `2.5`,
+  integers), but a result carrying floating-point slop shows it honestly
+  (`0.1 + 0.2` reads `0.30000000000000004`, `1/3` reads `0.3333333333333333`)
+  instead of a rounded 12-figure value that re-parsed to a slightly different
+  number.
+
 ## [0.1.0] - 2026-06-16
 
 the first release: the calculation engine, a cli/repl, a desktop gui, and
