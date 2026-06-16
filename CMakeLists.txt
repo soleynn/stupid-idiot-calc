@@ -16,6 +16,7 @@ option(CALC_WARNINGS_AS_ERRORS "treat warnings as errors (on in ci)" OFF)
 option(CALC_ENABLE_SANITIZERS "build with address + undefined sanitizers" OFF)
 option(CALC_ENABLE_COVERAGE "build with gcov coverage instrumentation" OFF)
 option(CALC_ENABLE_FUZZERS "build the libFuzzer harnesses (clang only)" OFF)
+option(CALC_BUILD_GUI "build the Qt Quick gui front-end (needs Qt 6)" OFF)
 
 # one home for the warning flags. every first-party target links this.
 add_library(calc_warnings INTERFACE)
@@ -65,9 +66,19 @@ add_subdirectory(src/engine)
 
 # the cli front-end (and its cxxopts/isocline fetches) isnt needed for a
 # fuzz-only configure, which builds just the harness against calc_core; skip it
-# there so that job doesnt clone deps it never links.
-if(NOT (CALC_ENABLE_FUZZERS AND NOT CALC_BUILD_TESTS))
+# there so that job doesnt clone deps it never links. its also desktop-only - the
+# isocline line-editing, isatty checks and posix signal handler dont belong on
+# android, which ships engine + gui only, so its gated off ANDROID too.
+if(NOT ANDROID AND NOT (CALC_ENABLE_FUZZERS AND NOT CALC_BUILD_TESTS))
   add_subdirectory(src/cli)
+endif()
+
+# the Qt gui front-end, off by default so the plain engine + cli build needs no
+# Qt at all. the `gui` preset and the advisory gui ci leg turn it on (Qt comes
+# via aqtinstall). it links the same calc_core, so the engine never knows it
+# exists - the front-end split, cashed in again.
+if(CALC_BUILD_GUI)
+  add_subdirectory(src/gui)
 endif()
 
 # clang-only libFuzzer harnesses, off by default and built apart from the test

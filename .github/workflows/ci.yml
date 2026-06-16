@@ -151,3 +151,32 @@ jobs:
 
       - name: fuzz for 30s
         run: ./build/fuzz/fuzz_parse -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+
+  # advisory: build the Qt Quick gui against the unchanged engine and run its
+  # headless --selftest. Qt comes prebuilt via aqtinstall (dynamic, LGPLv3), not
+  # vcpkg - vcpkg builds Qt from source and would cost hours a leg. separate from
+  # the required `build` gate; a break here doesnt block a merge.
+  gui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: install qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: 6.8.1
+          cache: true
+
+      - name: configure
+        run: cmake --preset gui
+
+      - name: build
+        run: cmake --build --preset gui
+
+      # construct the bridge + evaluate "1 + 2 * 3", no window. offscreen so it
+      # needs no display. proves the gui computes without anyone clicking.
+      - name: headless self-test
+        run: QT_QPA_PLATFORM=offscreen ./build/gui/calc-gui --selftest
