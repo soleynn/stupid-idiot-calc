@@ -8,6 +8,7 @@
 
 #include "calc/ast.hpp"
 #include "calc/error.hpp"
+#include "calc/limits.hpp"
 #include "calc/token.hpp"
 
 namespace calc {
@@ -17,9 +18,12 @@ namespace {
 // safety limits. recursive descent recurses on nested parens and on chained
 // unary minus, so a wall of '(' or of '-' could overflow the stack. cap the
 // depth. a very long flat expression cant overflow the parser (the +/- and */
-// levels loop) but it does build a deep left-leaning tree, so cap the token
-// count too. both come back as a CalcError, not a crash. neither limit is
-// reachable by a human typing at the repl.
+// levels loop) but it does build a deep left-leaning tree, so the token count
+// is capped too: that cap (kMaxTokens, in calc/limits.hpp) is enforced first by
+// the lexer so an oversized line never balloons in memory, and the check in
+// parse() below is the backstop for a hand-built token list. both come back as
+// a CalcError, not a crash. neither limit is reachable by a human typing at the
+// repl.
 //
 // note: a near-cap flat tree is ~kMaxTokens/2 deep. the evaluator, the --trace
 // tree render, and ~Expr all walk that depth iteratively now (explicit
@@ -27,7 +31,6 @@ namespace {
 // the native stack one frame per node. that keeps it within the small stacks
 // android/qt worker threads run on, not just the 8mb main-thread stack.
 constexpr int kMaxDepth = 256;
-constexpr std::size_t kMaxTokens = 4096;
 
 // thrown internally for a convenient early-return out of the recursion, and
 // caught at the parse() boundary, which is the only place it converts back to a

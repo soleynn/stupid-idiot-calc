@@ -6,6 +6,7 @@
 #include "calc/ast.hpp"
 #include "calc/error.hpp"
 #include "calc/lexer.hpp"
+#include "calc/limits.hpp"
 #include "calc/output_formatter.hpp"
 #include "calc/parser.hpp"
 
@@ -251,15 +252,13 @@ TEST_CASE("a deep chain of unary minus comes back as an error too") {
   REQUIRE(tree.error().message == "expression nests too deep");
 }
 
-TEST_CASE("an oversized flat expression comes back as an error") {
-  // "1+1+1+..." with enough terms to pass the token cap. it isnt deeply
-  // recursive, so this exercises the length pre-check, not the depth guard.
-  // the message check pins that down.
-  std::string input = "1";
-  for (int i = 0; i < 2100; ++i) {
-    input += "+1";
-  }
-  auto tree = parse_str(input);
+TEST_CASE("parse refuses a token list longer than the cap") {
+  // the lexer is the primary length gate now (see test_lexer.cpp), so an
+  // oversized string never reaches parse() through tokenize. parse() keeps its
+  // own size backstop for a hand-built token list though - feed it one past the
+  // cap directly; the size check fires before the contents matter.
+  const std::vector<Token> tokens(kMaxTokens + 1);
+  const Result<Expr> tree = parse(tokens);
   REQUIRE_FALSE(tree.has_value());
   REQUIRE(tree.error().kind == ErrorKind::TooComplex);
   REQUIRE(tree.error().message == "expression is too long");

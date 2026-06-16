@@ -187,3 +187,11 @@ TEST_CASE("a flat expression right at the token cap still evaluates") {
   }
   REQUIRE(value_of(input) == 2048.0);
 }
+
+TEST_CASE("an oversized line is rejected without building a giant token list") {
+  // the length cap lives in the lexer, so evaluate() turns a multi-million char
+  // line straight into a TooComplex error instead of ballooning a multi-gb
+  // token vector first. this is the same path the cli arg, the repl line and
+  // the gui bridge all funnel through.
+  REQUIRE(error_kind_of(std::string(5'000'000, '+')) == ErrorKind::TooComplex);
+}

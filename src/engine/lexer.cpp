@@ -5,6 +5,8 @@
 
 #include <fast_float/fast_float.h>
 
+#include "calc/limits.hpp"
+
 namespace calc {
 
 namespace {
@@ -29,6 +31,15 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
   std::size_t i = 0;
 
   while (i < n) {
+    // stop before the token vector can balloon. the only complexity cap used to
+    // live in parse(), which runs after the whole vector is built - so a
+    // multi-mb line ballooned into a multi-gb vector before the size check
+    // rejected it. bail right here at the same cap, with the same error, the
+    // moment the count passes it.
+    if (tokens.size() > kMaxTokens) {
+      return CalcError{ErrorKind::TooComplex, "expression is too long"};
+    }
+
     const char c = input[i];
 
     if (is_space(c)) {
