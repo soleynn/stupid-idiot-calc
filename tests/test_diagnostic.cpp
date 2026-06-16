@@ -49,3 +49,24 @@ TEST_CASE("diagnostic skips the caret when the error has no location") {
   CalcError err{ErrorKind::DivideByZero, "cant divide by zero"};
   REQUIRE(render_diagnostic("1 / 0", err) == "error: cant divide by zero");
 }
+
+TEST_CASE("diagnostic underlines a whole multi-character error token") {
+  Environment env;
+  auto result = evaluate("1 23456789", env);
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(render_diagnostic("1 23456789", result.error()) ==
+          "error: unexpected input after the expression (column 3)\n"
+          "1 23456789\n"
+          "  ^~~~~~~~");
+}
+
+TEST_CASE("diagnostic counts characters, not bytes, under multibyte utf-8") {
+  // "é+$": é is 2 bytes (C3 A9) but one glyph, so the caret must sit under '$'
+  // at character column 3 with two columns of padding, not three.
+  const CalcError err{ErrorKind::UnexpectedChar, "unexpected character '$'",
+                      SourceSpan{3, 1}};
+  REQUIRE(render_diagnostic("\xC3\xA9+$", err) ==
+          "error: unexpected character '$' (column 3)\n"
+          "\xC3\xA9+$\n"
+          "  ^");
+}

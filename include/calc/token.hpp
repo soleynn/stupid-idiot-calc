@@ -29,6 +29,7 @@ struct Token {
   Number value = 0.0;     // only meaningful when type == Num
   std::string text;       // the name, only meaningful when type == Ident
   std::size_t offset = 0; // byte position in the source, for error spans
+  std::size_t length = 0; // byte length of the token's source text (End is 0)
 };
 
 } // namespace calc

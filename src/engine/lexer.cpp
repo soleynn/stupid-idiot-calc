@@ -24,6 +24,33 @@ bool is_alpha(char c) {
 
 bool is_ident_char(char c) { return is_alpha(c) || is_digit(c); }
 
+// the byte length of the utf-8 codepoint starting at input[i], or 0 if it isnt
+// a well-formed one (a stray continuation byte, or a lead byte missing its
+// continuation bytes). lets an "unexpected character" error span and quote a
+// whole non-ascii glyph instead of one byte of it.
+std::size_t utf8_len(std::string_view input, std::size_t i) {
+  const auto lead = static_cast<unsigned char>(input[i]);
+  std::size_t len = 0;
+  if (lead < 0x80) {
+    len = 1;
+  } else if (lead >= 0xC0 && lead < 0xE0) {
+    len = 2;
+  } else if (lead >= 0xE0 && lead < 0xF0) {
+    len = 3;
+  } else if (lead >= 0xF0 && lead < 0xF8) {
+    len = 4;
+  } else {
+    return 0; // a continuation byte or invalid lead, not a codepoint start
+  }
+  for (std::size_t k = 1; k < len; ++k) {
+    if (i + k >= input.size() ||
+        (static_cast<unsigned char>(input[i + k]) & 0xC0) != 0x80) {
+      return 0; // the continuation bytes arent there
+    }
+  }
+  return len;
+}
+
 } // namespace
 
 Result<std::vector<Token>> tokenize(std::string_view input) {
@@ -91,6 +118,7 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
 
     if (matched) {
       tok.type = single;
+      tok.length = 1;
       tokens.push_back(tok);
       ++i;
       continue;
@@ -119,8 +147,9 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
       }
       tok.type = TokenType::Num;
       tok.value = value; // the parsed number, or 0 on an underflow
+      tok.length = static_cast<std::size_t>(fc.ptr - first);
       tokens.push_back(tok);
-      i += static_cast<std::size_t>(fc.ptr - first);
+      i += tok.length;
       continue;
     }
 
@@ -132,6 +161,7 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
       }
       tok.type = TokenType::Ident;
       tok.text = std::string(input.substr(i, j - i));
+      tok.length = j - i;
       tokens.push_back(std::move(tok));
       i = j;
       continue;
@@ -142,6 +172,22 @@ Result<std::vector<Token>> tokenize(std::string_view input) {
       // ''" (the literal NUL closes the quoted char early). name it instead.
       return CalcError{ErrorKind::UnexpectedChar,
                        "unexpected NUL byte in input", SourceSpan{i, 1}};
+    }
+    if (static_cast<unsigned char>(c) >= 0x80) {
+      // a non-ascii byte: a utf-8 glyph the calc doesnt understand. quote and
+      // span the whole codepoint so the message stays valid utf-8 and the caret
+      // covers the character, not one byte of it.
+      const std::size_t cp = utf8_len(input, i);
+      if (cp >= 2) {
+        return CalcError{ErrorKind::UnexpectedChar,
+                         "unexpected character '" +
+                             std::string(input.substr(i, cp)) + "'",
+                         SourceSpan{i, cp}};
+      }
+      // a stray/invalid byte: dont splice it into the message (it'd be bad
+      // utf-8); name it generically.
+      return CalcError{ErrorKind::UnexpectedChar, "unexpected non-ASCII byte",
+                       SourceSpan{i, 1}};
     }
     return CalcError{ErrorKind::UnexpectedChar,
                      std::string("unexpected character '") + c + "'",

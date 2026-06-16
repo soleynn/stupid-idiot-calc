@@ -56,6 +56,17 @@ TEST_CASE("tokenize rejects an embedded NUL byte") {
   REQUIRE(r.error().span.offset == 3u); // points right at the NUL
 }
 
+TEST_CASE("tokenize rejects a non-ascii character as a whole codepoint") {
+  // "é" is 2 bytes (C3 A9); the error spans both, not just the lead byte, and
+  // the quoted character in the message is valid utf-8.
+  auto r = tokenize("\xC3\xA9");
+  REQUIRE_FALSE(r.has_value());
+  REQUIRE(r.error().kind == ErrorKind::UnexpectedChar);
+  REQUIRE(r.error().span.offset == 0u);
+  REQUIRE(r.error().span.length == 2u);
+  REQUIRE(r.error().message == "unexpected character '\xC3\xA9'");
+}
+
 TEST_CASE("tokenize reports out-of-range numbers") {
   auto r = tokenize("1e400");
   REQUIRE_FALSE(r.has_value());
