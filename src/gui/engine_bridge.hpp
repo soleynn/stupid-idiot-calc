@@ -19,6 +19,9 @@ class Engine : public QObject {
   Q_OBJECT
   QML_ELEMENT
   Q_PROPERTY(QStringList history READ history NOTIFY historyChanged)
+  // just the raw typed expressions, newest-first - what up/down arrow recall
+  // reads. parallels history_ exactly (same length + order), no result text.
+  Q_PROPERTY(QStringList inputs READ inputs NOTIFY inputsChanged)
 
 public:
   explicit Engine(QObject *parent = nullptr);
@@ -29,13 +32,16 @@ public:
   Q_INVOKABLE QString evaluate(const QString &expression);
 
   QStringList history() const;
+  QStringList inputs() const;
 
 signals:
   void historyChanged();
+  void inputsChanged();
 
 private:
   calc::Environment env_;
   QStringList history_;
+  QStringList inputs_;
 };
 
 } // namespace calc::gui
