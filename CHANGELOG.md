@@ -40,6 +40,12 @@ versioning](https://semver.org/).
   `--trace` tree render and the tree teardown all do it iteratively now, so the
   depth cant overflow the stack. desktop behaviour is unchanged and the same
   expression still returns the same answer.
+- an oversized line (a giant paste, a multi-megabyte argument) is now rejected
+  at the lexer the moment it passes the 4096-token cap, instead of building the
+  whole token vector first and only then checking the size. a five-million char
+  line used to balloon to a few hundred megabytes before the parser turned it
+  down; now the token vector never grows past the cap. the error is the same
+  "expression is too long" as before, just paid cheaply up front.
 
 ## [0.1.0] - 2026-06-16
 

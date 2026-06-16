@@ -1,6 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
+
 #include "calc/lexer.hpp"
+#include "calc/limits.hpp"
 
 using namespace calc;
 
@@ -71,4 +74,20 @@ TEST_CASE("tokenize reads names and commas") {
   REQUIRE(toks[4].type == TokenType::Num);
   REQUIRE(toks[4].value == 2.0);
   REQUIRE(toks[5].type == TokenType::RParen);
+}
+
+TEST_CASE("tokenize stops oversized input at the token cap") {
+  // a flat run of operators is one token each. right at the cap it still
+  // tokenizes (kMaxTokens-1 ops plus the End token = kMaxTokens); a
+  // five-million char line is rejected outright instead of building the whole
+  // multi-million element vector first, which is the cheap length gate that
+  // used to only happen in parse() after the fact.
+  const auto at_cap = tokenize(std::string(kMaxTokens - 1, '+'));
+  REQUIRE(at_cap.has_value());
+  REQUIRE(at_cap.value().size() == kMaxTokens);
+
+  const auto over = tokenize(std::string(5'000'000, '+'));
+  REQUIRE_FALSE(over.has_value());
+  REQUIRE(over.error().kind == ErrorKind::TooComplex);
+  REQUIRE(over.error().message == "expression is too long");
 }
