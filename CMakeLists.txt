@@ -96,3 +96,26 @@ if(CALC_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
 endif()
+
+# package calc-gui into a self-contained archive: a .dmg on mac, a .zip on win.
+# version comes from CALC_VERSION (the release injects the git tag via -D). linux
+# ships via flatpak, so this is apple/win only and inert everywhere else - the
+# engine+cli build and the ubuntu gui leg never see CPack. stays at the very end,
+# after add_subdirectory(src/gui), so every install() rule is registered before
+# include(CPack) snapshots them.
+if(CALC_BUILD_GUI AND (APPLE OR WIN32))
+  set(CPACK_PACKAGE_NAME "stupid-idiot-calc")
+  set(CPACK_PACKAGE_VERSION "${CALC_VERSION}")
+  set(CPACK_PACKAGE_VENDOR "soleynn")
+  set(CPACK_VERBATIM_VARIABLES ON)
+  set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+  if(APPLE)
+    set(CPACK_GENERATOR "DragNDrop")
+    set(CPACK_PACKAGE_FILE_NAME "stupid-idiot-calc-${CALC_VERSION}-macos")
+    set(CPACK_DMG_VOLUME_NAME "stupid idiot calc ${CALC_VERSION}")
+  elseif(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_PACKAGE_FILE_NAME "stupid-idiot-calc-${CALC_VERSION}-windows")
+  endif()
+  include(CPack)
+endif()

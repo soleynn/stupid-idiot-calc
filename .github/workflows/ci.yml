@@ -223,3 +223,99 @@ jobs:
       # needs no display. proves the gui computes without anyone clicking.
       - name: headless self-test
         run: QT_QPA_PLATFORM=offscreen ./build/gui/calc-gui --selftest
+
+  # advisory: package calc-gui into a self-contained mac .dmg / windows .zip with
+  # Qt bundled (dynamic, LGPLv3), then prove the archive runs with Qt scrubbed
+  # from the loader path - the real check that Qt is bundled, not just present on
+  # the runner. linux ships via flatpak so it's not in this matrix. separate from
+  # the required `build` gate; a red x here never blocks a merge.
+  desktop-archives:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja (macos)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: set up msvc (windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      - name: install ninja (windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
+
+      - name: install qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: 6.8.1
+          cache: true
+
+      - name: configure
+        run: cmake --preset gui-release
+
+      - name: build
+        run: cmake --build --preset gui-release
+
+      - name: package
+        run: cpack --config build/gui-release/CPackConfig.cmake -B build/gui-release
+
+      # mac: mount the dmg, copy the .app off the read-only image, detach, then run
+      # the bundled binary with the env stripped (env -i drops DYLD_* + the aqt
+      # exports; PATH=/usr/bin:/bin drops the aqt Qt bin). a correctly deployed
+      # bundle resolves Qt via @executable_path/../Frameworks and prints the
+      # version; an under-deployed one fails dyld resolution and exits nonzero. the
+      # qml modules arent exercised by --version (it returns before the qml load),
+      # so assert their dirs are bundled too.
+      - name: smoke test (macos)
+        if: runner.os == 'macOS'
+        run: |
+          set -euxo pipefail
+          DMG=$(ls build/gui-release/*.dmg)
+          MP=$(hdiutil attach "$DMG" -nobrowse -readonly | grep -o '/Volumes/[^[:space:]].*' | tail -1)
+          echo "=== dmg root ==="; ls -la "$MP"
+          APP=$(ls -d "$MP"/*.app)
+          cp -R "$APP" "$RUNNER_TEMP/calc-gui.app"
+          hdiutil detach "$MP"
+          APP="$RUNNER_TEMP/calc-gui.app"
+          echo "=== bundle dirs ==="; find "$APP/Contents" -maxdepth 4 -type d
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$APP/Contents/MacOS/calc-gui" --version
+          find "$APP" -type d -path '*qml/QtQuick/Controls*' | grep -q . || { echo "QtQuick.Controls qml not bundled"; exit 1; }
+          find "$APP" -type d -path '*qml/QtQuick/Layouts*'  | grep -q . || { echo "QtQuick.Layouts qml not bundled"; exit 1; }
+
+      # windows: unzip to a temp tree (NOT the build dir), drop everything but the
+      # system dirs from PATH so the only Qt6*.dll the loader can find is the one
+      # beside the exe, then run --version. no WIN32_EXECUTABLE, so stdout is
+      # delivered and we assert on the exit code. qwindows.dll + the qml modules
+      # must be bundled too.
+      - name: smoke test (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem build/gui-release/*.zip | Select-Object -First 1
+          if (-not $zip) { throw "no .zip produced by cpack" }
+          $out = Join-Path $env:RUNNER_TEMP "unpacked"
+          Expand-Archive -Path $zip.FullName -DestinationPath $out -Force
+          $exe = Get-ChildItem -Path $out -Recurse -Filter calc-gui.exe | Select-Object -First 1
+          if (-not $exe) { throw "calc-gui.exe not found in archive" }
+          $dir = $exe.DirectoryName
+          Write-Host "=== archive root ==="; Get-ChildItem -Path $dir | Select-Object Name
+          if (-not (Test-Path (Join-Path $dir 'platforms/qwindows.dll'))) { throw "qwindows.dll not bundled" }
+          if (-not (Get-ChildItem -Path $dir -Recurse -Directory -Filter Controls -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'QtQuick' })) { throw "QtQuick.Controls qml not bundled" }
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          & $exe.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw "calc-gui --version exit $LASTEXITCODE (missing bundled dll?)" }
+
+      - name: upload archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: calc-gui-${{ matrix.os }}
+          path: |
+            build/gui-release/*.dmg
+            build/gui-release/*.zip
+          if-no-files-found: error
