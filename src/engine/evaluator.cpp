@@ -80,8 +80,17 @@ Result<Number> fn_log(Number x) {
   return checked(std::log10(x));
 }
 
-Result<Number> fn_sin(Number x) { return checked(std::sin(x * kDegToRad)); }
-Result<Number> fn_cos(Number x) { return checked(std::cos(x * kDegToRad)); }
+// degrees -> radians, but reduce the angle mod 360 in degrees first (exactly,
+// with fmod) so a large angle doesnt lose its low bits in the multiply before
+// std::sin/cos/tan ever range-reduces. small/whole angles are untouched (fmod
+// is a no-op below 360), and e.g. 360 folds to exactly 0, so sin(360) is 0
+// instead of a tiny residue, and sin(1e15) stays accurate rather than drifting.
+Number deg_to_rad(Number degrees) {
+  return std::fmod(degrees, 360.0) * kDegToRad;
+}
+
+Result<Number> fn_sin(Number x) { return checked(std::sin(deg_to_rad(x))); }
+Result<Number> fn_cos(Number x) { return checked(std::cos(deg_to_rad(x))); }
 Result<Number> fn_tan(Number x) {
   // tan blows up at 90, 270, ... where the true value is infinite; a double
   // cant land exactly on the pole, so std::tan would hand back a huge finite
@@ -89,7 +98,7 @@ Result<Number> fn_tan(Number x) {
   if (std::fmod(std::fabs(x), 180.0) == 90.0) {
     return CalcError{ErrorKind::DomainError, "tan is undefined at this angle"};
   }
-  return checked(std::tan(x * kDegToRad));
+  return checked(std::tan(deg_to_rad(x)));
 }
 Result<Number> fn_abs(Number x) { return checked(std::fabs(x)); }
 Result<Number> fn_exp(Number x) { return checked(std::exp(x)); }
