@@ -227,29 +227,28 @@ TEST_CASE("a reasonable nesting depth still parses") {
   REQUIRE(shape_of(input) == "1");
 }
 
-TEST_CASE("absurd paren nesting comes back as an error, not a crash") {
-  // 200 deep (~402 tokens, way under the token cap) blows past the depth guard
-  // via the paren path. the message check makes sure it's really the depth
-  // guard firing, not the length pre-check.
-  const int depth = 200;
-  std::string input(static_cast<std::size_t>(depth), '(');
-  input += "1";
-  input.append(static_cast<std::size_t>(depth), ')');
-  auto tree = parse_str(input);
-  REQUIRE_FALSE(tree.has_value());
-  REQUIRE(tree.error().kind == ErrorKind::TooComplex);
-  REQUIRE(tree.error().message == "expression nests too deep");
+TEST_CASE("paren nesting caps at exactly 127, two depth guards per level") {
+  // a '(' descends through both the expression guard and the unary guard, so it
+  // trips kMaxDepth at half the levels: 127 deep parses (and collapses to the
+  // number inside), 128 trips it. the message pins that it's the depth guard
+  // firing, not the length cap.
+  REQUIRE(shape_of(std::string(127, '(') + "1" + std::string(127, ')')) == "1");
+
+  auto over = parse_str(std::string(128, '(') + "1" + std::string(128, ')'));
+  REQUIRE_FALSE(over.has_value());
+  REQUIRE(over.error().kind == ErrorKind::TooComplex);
+  REQUIRE(over.error().message == "expression nests too deep");
 }
 
-TEST_CASE("a deep chain of unary minus comes back as an error too") {
-  // the unary level has its own depth guard. "-----...1" recurses one level per
-  // '-', so this hits the guard down the parse_unary path (which the paren test
-  // never touches), at ~300 tokens, still well under the token cap.
-  const std::string input = std::string(300, '-') + "1";
-  auto tree = parse_str(input);
-  REQUIRE_FALSE(tree.has_value());
-  REQUIRE(tree.error().kind == ErrorKind::TooComplex);
-  REQUIRE(tree.error().message == "expression nests too deep");
+TEST_CASE("unary nesting caps at exactly 254, one depth guard per level") {
+  // a unary '-' only trips the unary guard, so a chain reaches twice the paren
+  // depth before the cap: 254 deep parses, 255 trips it.
+  REQUIRE(parse_str(std::string(254, '-') + "1").has_value());
+
+  auto over = parse_str(std::string(255, '-') + "1");
+  REQUIRE_FALSE(over.has_value());
+  REQUIRE(over.error().kind == ErrorKind::TooComplex);
+  REQUIRE(over.error().message == "expression nests too deep");
 }
 
 TEST_CASE("parse refuses a token list longer than the cap") {
