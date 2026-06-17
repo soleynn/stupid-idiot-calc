@@ -16,6 +16,11 @@ versioning](https://semver.org/).
   `deg` marker on the toggle).
 - the panel opens and closes with a smooth animation that reflows the keypad to
   fit instead of resizing the window — the keys just shrink to make room.
+- memory keys in the gui (`MC` `MR` `M+` `M−`), a row at the top of the `ƒ(x)`
+  panel. the engine always had memory but the gui had no way to reach it except
+  typing the mnemonics. `M+`/`M−` fold the last result into the register and
+  `MC` clears, each evaluating on the spot; `MR` drops the recalled value into
+  the expression ur building, the same way the `ans` key does.
 
 ### changed
 
