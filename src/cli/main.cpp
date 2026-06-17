@@ -150,43 +150,91 @@ int run_once(const std::string &expression, bool trace) {
   return kExitUserError;
 }
 
+// the flags calc understands. recognized by spelling wherever they sit on the
+// line, so `calc 2+2 --trace` behaves the same as `calc --trace 2+2`.
+bool is_known_flag(const std::string &arg) {
+  return arg == "-h" || arg == "--help" || arg == "-v" || arg == "--version" ||
+         arg == "-t" || arg == "--trace" || arg == "--log-level" ||
+         arg.rfind("--log-level=", 0) == 0;
+}
+
+// a "--word" token (two dashes then a letter) is only ever typed meaning an
+// option - its never a valid expression - so an unrecognized one is a mistyped
+// flag, not expression text. a single-dash token stays ambiguous on purpose:
+// `-5`, `-pi`, `-sqrt(2)` are real expressions, so those go through to the
+// engine rather than being second-guessed as flags. `--5` is just stacked unary
+// minus on a number, so a digit/'.'/'(' after the dashes still reads as one.
+bool looks_like_unknown_option(const std::string &arg) {
+  if (arg.rfind("--", 0) != 0 || arg.size() < 3) {
+    return false;
+  }
+  const char after = arg[2];
+  return !(after >= '0' && after <= '9') && after != '.' && after != '(';
+}
+
 // cxxopts reads any leading-'-' token as an option, so a one-shot expression
-// like "-5" or "-pi" gets rejected as an unknown flag. walk past the flags we
-// actually define (and the value --log-level takes) and drop a "--" in front of
-// the first token that isnt one, so the rest is taken literally as the
-// expression. a user-supplied "--" is left alone.
-std::vector<std::string> with_positional_guard(int argc, char **argv) {
-  std::vector<std::string> out;
-  out.reserve(static_cast<std::size_t>(argc) + 1);
-  bool split = false; // have we crossed from flags into the expression yet?
-  for (int i = 0; i < argc; ++i) {
+// like "-5" or "-pi" would be rejected as an unknown flag. so we sort the args
+// ourselves: pull the flags we recognize (and the value --log-level takes) to
+// the front regardless of where they sit, then a "--" so cxxopts takes
+// everything after it as the literal expression. a mistyped "--word" flag and a
+// --log-level missing its value are caught here and reported in `error` rather
+// than slipping through to the engine as a confusing "unknown name".
+struct GuardedArgs {
+  std::vector<std::string> argv; // reordered for cxxopts
+  std::string error;             // non-empty: print and exit before parsing
+};
+
+GuardedArgs with_positional_guard(int argc, char **argv) {
+  std::vector<std::string> flags; // recognized options, value flags as name=val
+  std::vector<std::string> exprs; // the expression words, in order
+  std::string error;
+  bool user_split = false; // saw an explicit "--": the rest is the expression
+
+  for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
-    if (i == 0 || split) { // the program name, or already past the "--"
-      out.push_back(arg);
+    if (user_split) {
+      exprs.push_back(arg);
       continue;
     }
-    if (arg == "--") { // the user separated it themselves
-      split = true;
-      out.push_back(arg);
+    if (arg == "--") {
+      user_split = true;
       continue;
     }
-    if (arg == "-h" || arg == "--help" || arg == "-v" || arg == "--version" ||
-        arg == "-t" || arg == "--trace" || arg.rfind("--log-level=", 0) == 0) {
-      out.push_back(arg);
-      continue;
-    }
-    if (arg == "--log-level") { // takes its value as the next token
-      out.push_back(arg);
-      if (i + 1 < argc) {
-        out.push_back(argv[++i]);
+    if (arg == "--log-level") {
+      // its value is the next token; fold it into the unambiguous name=value
+      // form so cxxopts cant grab the "--" separator by mistake. a bare one at
+      // the end (or before "--") has no value, which is its own error.
+      if (i + 1 < argc && std::string(argv[i + 1]) != "--") {
+        flags.push_back("--log-level=" + std::string(argv[++i]));
+      } else if (error.empty()) {
+        error = "--log-level needs a value (try --help)";
       }
       continue;
     }
-    out.push_back("--"); // first non-flag token: the expression starts here
-    out.push_back(arg);
-    split = true;
+    if (is_known_flag(arg)) {
+      flags.push_back(arg);
+      continue;
+    }
+    if (looks_like_unknown_option(arg)) {
+      if (error.empty()) {
+        error = "unknown option " + arg + " (try --help)";
+      }
+      continue;
+    }
+    exprs.push_back(arg);
   }
-  return out;
+
+  std::vector<std::string> out;
+  out.reserve(flags.size() + exprs.size() + 2);
+  out.emplace_back(argc > 0 ? argv[0] : "calc");
+  for (std::string &f : flags) {
+    out.push_back(std::move(f));
+  }
+  out.emplace_back("--"); // everything past here is the literal expression
+  for (std::string &e : exprs) {
+    out.push_back(std::move(e));
+  }
+  return {std::move(out), std::move(error)};
 }
 
 // the repl keeps a log of the lines u've typed, shown by :history. cap it so a
@@ -493,10 +541,14 @@ int main(int argc, char **argv) {
     options.positional_help("[expression]");
     options.parse_positional({"expression"});
 
-    const std::vector<std::string> guarded = with_positional_guard(argc, argv);
+    const GuardedArgs guarded = with_positional_guard(argc, argv);
+    if (!guarded.error.empty()) {
+      std::cerr << "error: " << guarded.error << "\n";
+      return kExitUserError;
+    }
     std::vector<const char *> gargv;
-    gargv.reserve(guarded.size());
-    for (const std::string &word : guarded) {
+    gargv.reserve(guarded.argv.size());
+    for (const std::string &word : guarded.argv) {
       gargv.push_back(word.c_str());
     }
     const cxxopts::ParseResult args =

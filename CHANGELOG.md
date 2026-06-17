@@ -85,6 +85,13 @@ versioning](https://semver.org/).
   "unexpected input": `0x1F` / `0b101` / `0o17` say hex / binary / octal literals
   arent supported (caret on the `0x`), and `1.2.3` says a number cant have more
   than one decimal point (caret on the second dot).
+- a mistyped flag like `--foo` or `--tracee` says "unknown option" now instead
+  of being shoved at the engine and coming back as a confusing "unknown name".
+  only `--word` typos are caught — a single dash stays free for expressions, so
+  `-5`, `-pi` and `-sqrt(2)` still evaluate. and a recognized flag works the
+  same after the expression as before it: `2+2 --trace` traces and
+  `2+2 --log-level debug` sets the level, where both used to be silently misread
+  as part of the expression. a `--log-level` with no value says so plainly.
 
 ### changed
 

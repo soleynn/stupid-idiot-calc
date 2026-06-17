@@ -100,6 +100,16 @@ set_tests_properties(cli_oneshot_error PROPERTIES WILL_FAIL TRUE)
 add_test(NAME cli_oneshot_negative COMMAND calc "-5")
 set_tests_properties(cli_oneshot_negative PROPERTIES PASS_REGULAR_EXPRESSION "^-5\r?\n")
 
+# a mistyped "--word" flag is rejected up front, not fed to the engine as a
+# confusing "unknown name". the message is pinned in the bash block below.
+add_test(NAME cli_unknown_option COMMAND calc --foo)
+set_tests_properties(cli_unknown_option PROPERTIES WILL_FAIL TRUE)
+
+# --log-level with nothing to take as its value errors instead of swallowing
+# the expression or the "--" separator.
+add_test(NAME cli_log_level_missing_value COMMAND calc 2+2 --log-level)
+set_tests_properties(cli_log_level_missing_value PROPERTIES WILL_FAIL TRUE)
+
 # the repl meta-commands need input on stdin, so these pipe through a shell.
 # the ci runner has bash; if its ever missing the tests are just skipped.
 find_program(BASH_EXECUTABLE bash)
@@ -131,6 +141,21 @@ if(BASH_EXECUTABLE)
   add_test(NAME cli_stats COMMAND ${BASH_EXECUTABLE} -c
     "printf '2 + 2\\n:stats\\n:quit\\n' | $<TARGET_FILE:calc>")
   set_tests_properties(cli_stats PROPERTIES PASS_REGULAR_EXPRESSION "1 ok")
+
+  # the unknown-option error names the offending flag - and crucially it's not
+  # the old engine "unknown name", which is the confusing message this fixes.
+  add_test(NAME cli_unknown_option_message COMMAND ${BASH_EXECUTABLE} -c
+    "$<TARGET_FILE:calc> --tracee 2+2 2>&1 | grep -q 'unknown option --tracee'")
+  add_test(NAME cli_unknown_option_not_unknown_name COMMAND ${BASH_EXECUTABLE} -c
+    "! $<TARGET_FILE:calc> --foo 2>&1 | grep -q 'unknown name'")
+
+  # a recognized flag works the same placed after the expression as before it:
+  # --log-level is honored (stdout is still just the result) and --trace still
+  # narrates. these are the position-dependent cases that used to misfire.
+  add_test(NAME cli_log_level_after_expr COMMAND ${BASH_EXECUTABLE} -c
+    "[ \"$($<TARGET_FILE:calc> 2+2 --log-level debug 2>/dev/null | tr -d '\\r')\" = '4' ]")
+  add_test(NAME cli_trace_after_expr COMMAND ${BASH_EXECUTABLE} -c
+    "$<TARGET_FILE:calc> 2+2 --trace 2>&1 | grep -q 'tokens:'")
 
   # an embedded NUL in a piped repl line must be rejected, not silently dropped
   # so the bytes around it merge into a different number (2+2<NUL>2+3 would
