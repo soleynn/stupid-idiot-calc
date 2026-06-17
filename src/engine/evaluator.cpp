@@ -226,9 +226,10 @@ struct Evaluator {
     return n.value;
   }
 
-  // a leaf: resolve a name. built-in names (ans, the memory register, pi/e)
-  // resolve case-insensitively to match is_reserved; user `let` names keep the
-  // exact case they were bound with.
+  // a leaf: resolve a name. everything resolves case-insensitively - the
+  // built-in names (ans, the memory register, pi/e) to match is_reserved, and
+  // user `let` names because the calc is case-insensitive throughout, so `Rate`
+  // and `rate` are the one variable (they're stored lower-cased; see eval_let).
   Result<Number> variable(const Variable &v) const {
     const std::string lower = to_lower(v.name);
     Number value = 0.0;
@@ -244,7 +245,7 @@ struct Evaluator {
       value = mem.value();
       found = true;
     } else if (lookup_constant(lower, value) ||
-               env.lookup_variable(v.name, value)) {
+               env.lookup_variable(lower, value)) {
       found = true; // a built-in constant, else a let-bound variable
     }
     if (!found) {
@@ -547,7 +548,10 @@ Result<Number> eval_let(const std::vector<Token> &tokens, Environment &env,
   if (!value) {
     return value;
   }
-  env.set_variable(name, value.value());
+  // store under the lower-cased name so `let X = 1` then `x` resolves, matching
+  // the case-insensitivity of constants/functions/ans. the reserved-name check
+  // above already folds case, so this only affects user names.
+  env.set_variable(to_lower(name), value.value());
   env.set_answer(value.value());
   return value.value();
 }

@@ -98,6 +98,11 @@ versioning](https://semver.org/).
 
 ### changed
 
+- `let` names are case-insensitive now, settling a corner where user variables
+  were case-sensitive while everything else (ans, pi/e, functions) ignored case.
+  so `let X = 1` then `x` is the same variable - `Rate` and `RATE` and `rate`
+  all refer to one binding. names are stored lower-cased, so `:vars` shows the
+  folded form.
 - numbers display at shortest round-trip precision now, so the shown value reads
   back as the exact same double. clean results stay short (`0.5`, `2.5`,
   integers), but a result carrying floating-point slop shows it honestly
