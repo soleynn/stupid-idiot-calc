@@ -6,6 +6,8 @@ versioning](https://semver.org/).
 
 ## [unreleased]
 
+## [0.2.0] - 2026-06-16
+
 ### added
 
 - a scientific function panel behind a `ƒ(x)` toggle above the keypad: `sin`,
@@ -35,6 +37,17 @@ versioning](https://semver.org/).
   the way most calculators do it. only a paren that runs off the end is
   forgiven: a stray `)` with nothing open (`)2+3`), an empty group (`(2+)`) and
   any other junk still error like before.
+- `let` names are case-insensitive now, settling a corner where user variables
+  were case-sensitive while everything else (ans, pi/e, functions) ignored case.
+  so `let X = 1` then `x` is the same variable - `Rate` and `RATE` and `rate`
+  all refer to one binding. names are stored lower-cased, so `:vars` shows the
+  folded form.
+- numbers display at shortest round-trip precision now, so the shown value reads
+  back as the exact same double. clean results stay short (`0.5`, `2.5`,
+  integers), but a result carrying floating-point slop shows it honestly
+  (`0.1 + 0.2` reads `0.30000000000000004`, `1/3` reads `0.3333333333333333`)
+  instead of a rounded 12-figure value that re-parsed to a slightly different
+  number.
 
 ### removed
 
@@ -106,20 +119,6 @@ versioning](https://semver.org/).
   "unknown function pi". a genuinely unknown name like `foo(1)` is still a plain
   "unknown function".
 
-### changed
-
-- `let` names are case-insensitive now, settling a corner where user variables
-  were case-sensitive while everything else (ans, pi/e, functions) ignored case.
-  so `let X = 1` then `x` is the same variable - `Rate` and `RATE` and `rate`
-  all refer to one binding. names are stored lower-cased, so `:vars` shows the
-  folded form.
-- numbers display at shortest round-trip precision now, so the shown value reads
-  back as the exact same double. clean results stay short (`0.5`, `2.5`,
-  integers), but a result carrying floating-point slop shows it honestly
-  (`0.1 + 0.2` reads `0.30000000000000004`, `1/3` reads `0.3333333333333333`)
-  instead of a rounded 12-figure value that re-parsed to a slightly different
-  number.
-
 ## [0.1.0] - 2026-06-16
 
 the first release: the calculation engine, a cli/repl, a desktop gui, and
@@ -146,5 +145,6 @@ installable builds for mac, linux and windows.
 - ci on linux, macos and windows — the `build` check gates merges, with
   advisory sanitizer, clang-tidy, coverage, fuzz and libc++ legs alongside it.
 
-[unreleased]: https://github.com/soleynn/stupid-idiot-calc/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/soleynn/stupid-idiot-calc/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/soleynn/stupid-idiot-calc/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/soleynn/stupid-idiot-calc/releases/tag/v0.1.0
