@@ -53,6 +53,19 @@ TEST_CASE("let binds a name that later lines can use") {
   REQUIRE(value_of(env, "x * 2 + 1") == 11.0);
 }
 
+TEST_CASE("let names are case-insensitive, like the rest of the calc") {
+  // the policy: `let X` and `let x` are the same variable, and a name resolves
+  // regardless of case - matching ans/pi/e/functions, which already ignore it.
+  Environment env;
+  REQUIRE(value_of(env, "let Rate = 5") == 5.0);
+  REQUIRE(value_of(env, "rate") == 5.0); // resolves regardless of case
+  REQUIRE(value_of(env, "RATE + 1") == 6.0);
+  // a differently-cased let rebinds the one variable, it doesnt make a second.
+  REQUIRE(value_of(env, "let RATE = 9") == 9.0);
+  REQUIRE(value_of(env, "Rate") == 9.0);
+  REQUIRE(env.variables().size() == 1u);
+}
+
 TEST_CASE("a let right-hand side is a full expression") {
   Environment env;
   REQUIRE(value_of(env, "let y = 2 + 3 * 4") == 14.0);
