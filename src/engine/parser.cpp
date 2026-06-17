@@ -178,7 +178,7 @@ private:
       advance();
       ++open_parens_;
       ExprPtr inner = parse_expression();
-      expect(TokenType::RParen, ErrorKind::UnbalancedParen, "expected ')'");
+      close_group();
       --open_parens_;
       return inner;
     }
@@ -211,7 +211,7 @@ private:
         args.push_back(parse_expression());
       }
     }
-    expect(TokenType::RParen, ErrorKind::UnbalancedParen, "expected ')'");
+    close_group();
     --open_parens_;
     return std::make_unique<Expr>(
         FunctionCall{std::move(name), std::move(args), name_span});
@@ -229,12 +229,22 @@ private:
     return tokens_[here];
   }
 
-  // consume a token of the given type or fail with a pointed error.
-  const Token &expect(TokenType type, ErrorKind kind, std::string message) {
-    if (peek().type != type) {
-      fail(kind, std::move(message), peek());
+  // close a paren group or a call's argument list. a ')' is consumed normally;
+  // a ')' that simply never arrives because the input ran out is forgiven and
+  // the group auto-closes, the way most calculators do, so `sqrt(49` means
+  // `sqrt(49)` and `(2+3` means `(2+3)`. only the at-end case is let through:
+  // anything else wedged where the ')' belongs (a stray number, name, '(') is
+  // still a real error, and so is a ')' on an empty/half-built group, because
+  // that fails earlier in parse_primary before we ever get here.
+  void close_group() {
+    if (peek().type == TokenType::RParen) {
+      advance();
+      return;
     }
-    return advance();
+    if (peek().type == TokenType::End) {
+      return; // auto-closed at end of input
+    }
+    fail(ErrorKind::UnbalancedParen, "expected ')'", peek());
   }
 
   // for errors with nothing to point at, like empty input: no span, no caret.
