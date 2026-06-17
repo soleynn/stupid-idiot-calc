@@ -132,6 +132,18 @@ std::string trim(const std::string &s) {
   return s.substr(first, last - first + 1);
 }
 
+// ascii lowercase, like the engine does for function/constant names. the meta
+// commands are all ascii, so this keeps `:QUIT`/`:Trace` matching `:quit`/
+// `:trace` without dragging in locale-aware case folding.
+std::string to_lower(std::string s) {
+  for (char &c : s) {
+    if (c >= 'A' && c <= 'Z') {
+      c = static_cast<char>(c - 'A' + 'a');
+    }
+  }
+  return s;
+}
+
 // evaluate one expression, print the result to stdout or the error to stderr,
 // and hand back a process exit code. this is the scriptable path: `calc "2+2"`
 // prints exactly `4` and nothing else, so it composes in a pipeline.
@@ -358,13 +370,14 @@ void cmd_vars(ReplState &state, const std::string &) {
 }
 
 void cmd_trace(ReplState &state, const std::string &arg) {
-  if (arg == "on") {
+  const std::string a = to_lower(arg); // on/off, same case-insensitivity
+  if (a == "on") {
     state.trace = true;
     std::cout << "trace on\n";
-  } else if (arg == "off") {
+  } else if (a == "off") {
     state.trace = false;
     std::cout << "trace off\n";
-  } else if (arg.empty()) {
+  } else if (a.empty()) {
     std::cout << (state.trace ? "trace is on\n" : "trace is off\n");
   } else {
     std::cout << "usage: :trace on|off\n";
@@ -396,10 +409,14 @@ const std::vector<ReplCommand> &commands() {
   return table;
 }
 
+// look up a command by the typed word, case-insensitively - the calc is
+// otherwise case-insensitive, so `:QUIT` and `:Trace` should work too. the
+// table names are all lowercase, so only the input needs folding.
 const ReplCommand *find_command(const std::string &name) {
+  const std::string lower = to_lower(name);
   for (const ReplCommand &c : commands()) {
     for (const std::string &n : c.names) {
-      if (n == name) {
+      if (n == lower) {
         return &c;
       }
     }

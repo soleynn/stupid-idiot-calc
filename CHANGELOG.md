@@ -92,6 +92,9 @@ versioning](https://semver.org/).
   same after the expression as before it: `2+2 --trace` traces and
   `2+2 --log-level debug` sets the level, where both used to be silently misread
   as part of the expression. a `--log-level` with no value says so plainly.
+- the repl `:`commands are case-insensitive now, like the rest of the calc, so
+  `:QUIT`, `:Trace`, `:Help` work the same as their lowercase forms (and
+  `:trace ON`/`OFF` too) instead of being rejected as an unknown command.
 
 ### changed
 

@@ -142,6 +142,14 @@ if(BASH_EXECUTABLE)
     "printf '2 + 2\\n:stats\\n:quit\\n' | $<TARGET_FILE:calc>")
   set_tests_properties(cli_stats PROPERTIES PASS_REGULAR_EXPRESSION "1 ok")
 
+  # the :commands are case-insensitive like the rest of the calc: an uppercase
+  # :STATS still runs (and :QUIT still leaves), instead of "unknown command".
+  add_test(NAME cli_meta_case_insensitive COMMAND ${BASH_EXECUTABLE} -c
+    "printf '2 + 2\\n:STATS\\n:QUIT\\n' | $<TARGET_FILE:calc>")
+  set_tests_properties(cli_meta_case_insensitive PROPERTIES
+    PASS_REGULAR_EXPRESSION "1 ok"
+    FAIL_REGULAR_EXPRESSION "unknown command")
+
   # the unknown-option error names the offending flag - and crucially it's not
   # the old engine "unknown name", which is the confusing message this fixes.
   add_test(NAME cli_unknown_option_message COMMAND ${BASH_EXECUTABLE} -c
