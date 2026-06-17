@@ -66,6 +66,21 @@ bool lookup_constant(const std::string &name, Number &out) {
   return false;
 }
 
+// if a lower-cased name resolves to a value rather than a function, name which
+// kind it is, so `pi(2)` / `ans(1)` can say "thats a constant/value, not a
+// function" instead of a misleading "unknown function". returns nullptr for a
+// name thats genuinely not a known function or value.
+const char *value_name_kind(const std::string &lower) {
+  Number ignore = 0.0;
+  if (lookup_constant(lower, ignore)) {
+    return "constant";
+  }
+  if (lower == "ans" || lower == "m" || lower == "mr") {
+    return "value"; // the session result and the memory register
+  }
+  return nullptr;
+}
+
 // the built-in functions, all single-argument. each does its own domain check
 // and runs the result through checked(), so an overflow (like exp of a big
 // number) comes back as an error, not a silent inf. trig works in degrees.
@@ -322,6 +337,12 @@ struct Evaluator {
           // so a bad call short-circuits without evaluating (or tracing) it.
           const UnaryFn fn = lookup_function(to_lower(call.name));
           if (fn == nullptr) {
+            if (const char *kind = value_name_kind(to_lower(call.name))) {
+              return CalcError{ErrorKind::UnknownName,
+                               "'" + call.name + "' is a " + kind +
+                                   ", not a function",
+                               call.span};
+            }
             return CalcError{ErrorKind::UnknownName,
                              "unknown function '" + call.name + "'", call.span};
           }
