@@ -28,6 +28,14 @@ ErrorKind error_kind_of(std::string_view input) {
   return result.error().kind;
 }
 
+// the failure message, for the cases where the exact wording is the point.
+std::string error_message_of(std::string_view input) {
+  Environment env;
+  auto result = evaluate(input, env);
+  REQUIRE_FALSE(result.has_value());
+  return result.error().message;
+}
+
 } // namespace
 
 TEST_CASE("evaluate returns a single number") {
@@ -164,6 +172,19 @@ TEST_CASE("unknown names and functions are errors") {
 TEST_CASE("functions called with the wrong number of arguments error") {
   REQUIRE(error_kind_of("sqrt()") == ErrorKind::WrongArgCount);
   REQUIRE(error_kind_of("sqrt(1, 2)") == ErrorKind::WrongArgCount);
+}
+
+TEST_CASE("a constant or value called with parens isnt 'unknown function'") {
+  // pi/e are real constants and ans/m/mr real session values; calling them like
+  // a function should name what they are, not pretend they dont exist.
+  REQUIRE(error_message_of("pi(2)") == "'pi' is a constant, not a function");
+  REQUIRE(error_message_of("e(1)") == "'e' is a constant, not a function");
+  REQUIRE(error_message_of("ans(2)") == "'ans' is a value, not a function");
+  REQUIRE(error_message_of("mr(1)") == "'mr' is a value, not a function");
+  // case doesnt matter: PI is still the constant.
+  REQUIRE(error_message_of("PI(2)") == "'PI' is a constant, not a function");
+  // a genuinely unknown name is still a plain unknown function, unchanged.
+  REQUIRE(error_message_of("foo(1, 2)") == "unknown function 'foo'");
 }
 
 TEST_CASE("evaluate handles fractional results") {

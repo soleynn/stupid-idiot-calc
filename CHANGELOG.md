@@ -95,6 +95,11 @@ versioning](https://semver.org/).
 - the repl `:`commands are case-insensitive now, like the rest of the calc, so
   `:QUIT`, `:Trace`, `:Help` work the same as their lowercase forms (and
   `:trace ON`/`OFF` too) instead of being rejected as an unknown command.
+- calling a constant or session value like a function says what it actually is
+  now: `pi(2)`/`e(1)` report "'pi' is a constant, not a function" and
+  `ans(2)`/`mr(1)` "is a value, not a function", instead of the misleading
+  "unknown function pi". a genuinely unknown name like `foo(1)` is still a plain
+  "unknown function".
 
 ### changed
 
