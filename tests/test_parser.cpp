@@ -146,11 +146,6 @@ TEST_CASE("parser handles argument lists") {
 }
 
 TEST_CASE("parser flags a malformed argument list") {
-  SECTION("an unclosed call") {
-    auto tree = parse_str("sqrt(1");
-    REQUIRE_FALSE(tree.has_value());
-    REQUIRE(tree.error().kind == ErrorKind::UnbalancedParen);
-  }
   SECTION("a trailing comma wants another argument") {
     auto tree = parse_str("sqrt(1,)");
     REQUIRE_FALSE(tree.has_value());
@@ -182,11 +177,6 @@ TEST_CASE("parser flags trailing junk after a complete expression") {
 }
 
 TEST_CASE("parser flags unbalanced parentheses") {
-  SECTION("missing close") {
-    auto tree = parse_str("(1 + 2");
-    REQUIRE_FALSE(tree.has_value());
-    REQUIRE(tree.error().kind == ErrorKind::UnbalancedParen);
-  }
   SECTION("extra close") {
     auto tree = parse_str("1 + 2)");
     REQUIRE_FALSE(tree.has_value());
@@ -206,6 +196,49 @@ TEST_CASE("balanced but empty parens are a missing operand, not unbalanced") {
   REQUIRE_FALSE(tree.has_value());
   REQUIRE(tree.error().kind == ErrorKind::UnexpectedToken);
   REQUIRE(tree.error().span.offset == 1u); // the ')'
+}
+
+TEST_CASE("an open paren left hanging at the end auto-closes") {
+  // a '(' or call that never gets its ')' before the input runs out is forgiven
+  // and closed for u, so each parses to exactly the shape of its closed form.
+  REQUIRE(shape_of("(2 + 3") == shape_of("(2 + 3)"));
+  REQUIRE(shape_of("2 * (3 + 4") == shape_of("2 * (3 + 4)"));
+  REQUIRE(shape_of("sqrt(49") == shape_of("sqrt(49)"));
+  // several levels can be left open at once.
+  REQUIRE(shape_of("2 * (3 + sqrt(4") == shape_of("2 * (3 + sqrt(4))"));
+}
+
+TEST_CASE("auto-close only forgives the at-end case, not a genuine error") {
+  // a ')' wedged against an open '(' is an empty/half-built group, not an
+  // end-of-input, so it still errors.
+  SECTION("an empty group") {
+    auto tree = parse_str("(2 +)");
+    REQUIRE_FALSE(tree.has_value());
+    REQUIRE(tree.error().kind == ErrorKind::UnexpectedToken);
+  }
+  SECTION("an empty call") {
+    // the shape is fine - a zero-arg call; the bad arg count is the evaluator's
+    // job (see test_evaluator.cpp), not a paren error to auto-close.
+    auto tree = parse_str("sqrt()");
+    REQUIRE(tree.has_value());
+    // a comma with no leading argument is still malformed, though.
+    auto leading_comma = parse_str("sqrt(,)");
+    REQUIRE_FALSE(leading_comma.has_value());
+  }
+  // a stray token where the ')' belongs is still junk, not an end-of-input.
+  SECTION("a number wedged after the group") {
+    auto tree = parse_str("(2 + 3 4");
+    REQUIRE_FALSE(tree.has_value());
+    REQUIRE(tree.error().kind == ErrorKind::UnbalancedParen);
+    REQUIRE(tree.error().span.offset == 7u); // the stray '4'
+  }
+  // a ')' with nothing open is still a stray close, never auto-anything.
+  SECTION("a stray close with nothing open") {
+    auto tree = parse_str(")2 + 3");
+    REQUIRE_FALSE(tree.has_value());
+    REQUIRE(tree.error().kind == ErrorKind::UnbalancedParen);
+    REQUIRE(tree.error().span.offset == 0u);
+  }
 }
 
 TEST_CASE("parser reports empty input") {

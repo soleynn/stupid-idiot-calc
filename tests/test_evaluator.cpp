@@ -226,6 +226,23 @@ TEST_CASE("evaluate passes a parse error straight through") {
   REQUIRE(error_kind_of("2 + * 3") == ErrorKind::UnexpectedToken);
 }
 
+TEST_CASE("a trailing open paren auto-closes to its closed-form result") {
+  REQUIRE(value_of("(2 + 3") == value_of("(2 + 3)"));
+  REQUIRE(value_of("2 * (3 + 4") == value_of("2 * (3 + 4)"));
+  REQUIRE(value_of("sqrt(49") == value_of("sqrt(49)"));
+  REQUIRE(value_of("sqrt(49") == 7.0);
+}
+
+TEST_CASE("auto-close does not rescue a genuinely malformed expression") {
+  // an empty/half-built group or a stray close is still an error, not something
+  // auto-close quietly fixes.
+  REQUIRE(error_kind_of("(2 +)") == ErrorKind::UnexpectedToken);
+  REQUIRE(error_kind_of(")2 + 3") == ErrorKind::UnbalancedParen);
+  // sqrt() parses (the parser doesnt count args) but the evaluator still
+  // rejects a zero-arg sqrt, so it never silently succeeds.
+  REQUIRE(error_kind_of("sqrt()") == ErrorKind::WrongArgCount);
+}
+
 TEST_CASE("a flat expression right at the token cap still evaluates") {
   // "1+1+...+1" with 2048 ones is exactly kMaxTokens (4096) tokens: the largest
   // flat input the parser accepts. it builds a ~2047-deep tree, so this pins

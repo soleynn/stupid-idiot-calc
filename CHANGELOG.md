@@ -25,6 +25,11 @@ versioning](https://semver.org/).
   `0` at rest now.
 - pinned the Basic qt quick controls style so the gui looks identical on mac,
   linux and windows instead of each platforms native one.
+- a `(` left open at the end of a line now auto-closes instead of erroring, so
+  `sqrt(49`, `(2+3` and `2*(3+4` give the same answer as their closed forms —
+  the way most calculators do it. only a paren that runs off the end is
+  forgiven: a stray `)` with nothing open (`)2+3`), an empty group (`(2+)`) and
+  any other junk still error like before.
 
 ### removed
 
