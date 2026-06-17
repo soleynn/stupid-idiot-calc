@@ -22,8 +22,9 @@ ApplicationWindow {
     property bool sciOpen: false
     // height the panel takes when open. the keypad below shrinks by this much to
     // make room - the window itself never resizes, the keys just get smaller (a
-    // phone cant grow, so neither does this).
-    readonly property int sciPanelHeight: 130
+    // phone cant grow, so neither does this). sized for four rows: the memory
+    // keys plus the three rows of functions/constants.
+    readonly property int sciPanelHeight: 176
 
     // up/down recall through engine.inputs (newest-first raw expressions).
     // -1 = live editing ur own draft; 0..n-1 = showing inputs[recallIndex].
@@ -65,6 +66,17 @@ ApplicationWindow {
         if (window.expression.length === 0)
             return
         result.text = engine.evaluate(window.expression)
+    }
+
+    // M+/M-/MC are one-shot commands: they fold the last result into the memory
+    // register (or clear it), so they evaluate right away like hitting = on that
+    // command, and the result line shows the new register. MR is different - its
+    // a value, so its key uses tap() to drop "MR" into the expression you're
+    // building, exactly like the ans key, instead of running through here.
+    function memory(cmd) {
+        window.resetRecall()
+        keyCatcher.forceActiveFocus()
+        result.text = engine.evaluate(cmd)
     }
 
     // arrowUp: step to an older entry. clamps at the oldest, no wrap.
@@ -287,6 +299,14 @@ ApplicationWindow {
                 columnSpacing: 10
                 opacity: window.sciOpen ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 160 } }
+
+                // memory: MC clears, MR recalls into the expression, M+/M- fold
+                // the last result in. they share the blue zone but read clearly
+                // as their own row up top.
+                CalcButton { text: "MC";  role: "sci"; onClicked: window.memory("MC") }
+                CalcButton { text: "MR";  role: "sci"; onClicked: window.tap("MR") }
+                CalcButton { text: "M+";  role: "sci"; onClicked: window.memory("M+") }
+                CalcButton { text: "M−";  role: "sci"; onClicked: window.memory("M-") }
 
                 CalcButton { text: "sin";   role: "sci"; onClicked: window.tap("sin(") }
                 CalcButton { text: "cos";   role: "sci"; onClicked: window.tap("cos(") }
